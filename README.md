@@ -1,4 +1,4 @@
-![Logo](img\Logo_Dentistimo.png "Dentistimo logo")
+![Logo](./img/Logo_Dentistimo.png "Dentistimo logo")
 
 # User Authentication
 
