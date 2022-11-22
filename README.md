@@ -1,3 +1,5 @@
+![Logo](Logo_Dentistimo.png "Dentistimo logo")
+
 # User Authentication
 
 
