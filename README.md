@@ -6,7 +6,7 @@ This is a user authentication component that is part of [Dentistimo](https://git
 
 ## Visuals
 
-This diagram shows the interaction and purpose of thi component
+This diagram shows the interaction and purpose of this component.
 
 ![Diagram](./img/auth_diagram.jpg "Diagram")
 
