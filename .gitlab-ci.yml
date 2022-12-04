@@ -1,14 +1,21 @@
 image: node:latest
 
-# This folder is cached between builds
-# https://docs.gitlab.com/ee/ci/yaml/index.html#cache
 cache:
   paths:
     - node_modules/
 
-test_build:
+make_code_nice:
   tags: 
     - docker
   script:
     - npm install
-    - node index.js
+    - npm run format
+
+check_if_code_is_nice:
+  tags: 
+    - docker
+  script:
+  - npm install
+  - npm run lint
+  dependencies:
+    - make_code_nice
