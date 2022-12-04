@@ -1,29 +1,9 @@
-image: node:latest
-
-stages:
-  - build
-  - run
-
-# Job's name
-first-job:
-  # Define stage
+build:
+  image: node:18
   stage: build
-  # What to run on the job.
+  tags: 
+    - docker
   script:
-    - npm install
-  artifacts:
-    paths:
-      - node_modules
-
-second-job:
-  stage: run
-  script:
-    - npm run start
-  artifacts:
-    paths:
-      - node_modules/
-
-second-job-parallel:
-  stage: run
-  script:
-    - echo "I'm running at the same time as second-job!!!"
+    - cd user-authentication
+    - npm install 
+    - npm run build
