@@ -1,25 +1,15 @@
 image: node:latest
 
-stages:
-  - npm
-  - test
+cache:
+  paths:
+    - node_modules/
 
-npm:
-  stage: npm
+make_code_nice:
   script:
     - npm install
-  cache:
-    paths:
-      - node_modules/
-  artifacts:
-    expire_in: 1 days
-    when: on_success
-    paths:
-      - node_modules/
+    - npm run format
 
-test:
-  stage: test
-  dependencies:
-    - npm
-  script:
-    - npm test
+check_if_code_is_nice:
+    script:
+    - npm install
+    - npm run lint
