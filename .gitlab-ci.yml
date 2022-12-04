@@ -11,4 +11,4 @@ test_build:
     - docker
   script:
     - npm install
-    - npm run start
+    - node index.js
