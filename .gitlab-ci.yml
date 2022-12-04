@@ -4,6 +4,5 @@ build:
   tags: 
     - docker
   script:
-    - cd user-authentication
     - npm install 
     - npm run build
