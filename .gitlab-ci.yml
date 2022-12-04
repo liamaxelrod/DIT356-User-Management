@@ -5,5 +5,5 @@ build:
     - docker
   script:
     - npm install
-    - sudo npm install -g nodemon
+    - npm install -g nodemon
     - npm run start
