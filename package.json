@@ -4,7 +4,7 @@
   "description": "To make it easy for you to get started with GitLab, here's a list of recommended next steps.",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon index.js",
+    "start": "nodemon ./index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -16,6 +16,9 @@
   "license": "ISC",
   "dependencies": {
     "dotenv": "^16.0.3",
+    "express-jwt": "^7.7.7",
+    "express-oauth2-jwt-bearer": "^1.2.0",
+    "jwks-rsa": "^3.0.0",
     "mqtt": "^4.3.7",
     "nodemon": "^2.0.20"
   }

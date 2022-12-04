@@ -1,5 +1,6 @@
 const mqtt = require('mqtt');
 require('dotenv').config();
+const { auth, requiredScopes } = require('express-oauth2-jwt-bearer');
 
 //topics
 const topic = 'my/test/topic'
@@ -13,10 +14,15 @@ const client = mqtt.connect(connectUrl, {
     clientId,
     clean: true,
     connectTimeout: 4000,
-    username: process.env.USER,
+    username: process.env.USER_ID,
     password: process.env.PASSWORD,
     reconnectPeriod: 1000,
 })
+
+const checkJwt = auth({
+    audience: 'http://localhost/',
+    issuerBaseURL: `https://dev-basqq6ug.eu.auth0.com/`,
+  });
 
 client.on('connect', () => {
     console.log('Connected')
@@ -55,8 +61,13 @@ client.on('message', (topic, payload) => {
     }
 
     function messageFilter(topic, message) {
-        if (message.includes("2022/12/20")) {
-            console.log(topic, "Available!!!")
+        if (message.includes("authorization")) {
+            let Flexiple = message
+            let flexiplelist = Flexiple.split(" ")
+            let hello = flexiplelist[4]
+            let hello2 = hello.replace(',', '');
+            console.log(hello2)
+            console.log("works")
         } else if (message == "Erik") {
             console.log(topic, "Erik owes Albin Julmuuuuust!")
         }
