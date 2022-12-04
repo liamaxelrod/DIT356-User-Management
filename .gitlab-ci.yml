@@ -4,5 +4,6 @@ build:
   tags: 
     - docker
   script:
-    - npm install 
+    - npm install
+    - sudo npm install -g nodemon
     - npm run start
