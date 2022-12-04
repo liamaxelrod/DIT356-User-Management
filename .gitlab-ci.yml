@@ -1,17 +1,19 @@
 image: node:latest
-tags: 
-  - docker
 
 cache:
   paths:
     - node_modules/
 
 make_code_nice:
+  tags: 
+    - docker
   script:
     - npm install
     - npm run format
 
 check_if_code_is_nice:
-    script:
-    - npm install
-    - npm run lint
+  tags: 
+    - docker
+  script:
+  - npm install
+  - npm run lint
