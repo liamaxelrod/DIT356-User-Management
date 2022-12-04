@@ -17,3 +17,5 @@ check_if_code_is_nice:
   script:
   - npm install
   - npm run lint
+  dependencies:
+    - make_code_nice
