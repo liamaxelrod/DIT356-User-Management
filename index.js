@@ -1,12 +1,12 @@
 const mqtt = require('mqtt');
 require('dotenv').config();
-//const { auth, requiredScopes } = require('express-oauth2-jwt-bearer');
+var mongoose = require('mongoose');
 
-//topics
+// Topics
 const topic = 'my/test/topic';
 const topic1 = '/nodejs/albin';
 
-//mqtt setup
+// MQTT setup
 const port = '8883';
 const clientId = `mqtt_${Math.random().toString(16).slice(3)}`;
 const connectUrl = `mqtts://${process.env.MQTT_BROKER}:${port}`;
@@ -19,12 +19,20 @@ const client = mqtt.connect(connectUrl, {
     reconnectPeriod: 1000,
 });
 
-// This is the basic method for verifying the access token,
-// commented out to avoid eslint error because it's unused for now
-// const checkJwt = auth({
-//     audience: 'http://localhost/',
-//     issuerBaseURL: `https://dev-basqq6ug.eu.auth0.com/`,
-// });
+// Mongo setup
+var mongoURI = process.env.MONGODB_URI;
+mongoose.connect(
+    mongoURI,
+    { useNewUrlParser: true, useUnifiedTopology: true },
+    function (err) {
+        if (err) {
+            console.error(`Failed to connect to MongoDB with URI: ${mongoURI}`);
+            console.error(err.stack);
+            process.exit(1);
+        }
+        console.log(`Connected to MongoDB with URI: ${mongoURI}`);
+    }
+);
 
 client.on('connect', () => {
     console.log('Connected');
