@@ -8,6 +8,8 @@ This is the user management component that is part of [Dentistimo](https://git.c
 
 This diagram shows the interaction and purpose of this component.
 
+![Diagram](./img/DiagramV3.png "System Diagram")
+
 ## Installation
 
 ## Usage
