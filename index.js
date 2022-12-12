@@ -1,10 +1,12 @@
 const mqtt = require('mqtt');
 require('dotenv').config();
 var mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
+
+const User = require('./models/user');
 
 // Topics
-const topic = 'my/test/topic';
-const topic1 = '/nodejs/albin';
+const registerTopic = 'dentistimo/register';
 
 // MQTT setup
 const port = '8883';
@@ -36,57 +38,70 @@ mongoose.connect(
 
 client.on('connect', () => {
     console.log('Connected');
-    client.subscribe([topic], () => {
-        console.log(`Subscribe to topic '${topic}'`);
+    client.subscribe([registerTopic], () => {
+        console.log(`Subscribe to topic '${registerTopic}'`);
         console.log(clientId);
     });
-    client.subscribe([topic1], () => {
-        console.log(`Subscribe to topic '${topic1}'`);
-        console.log(clientId);
-    });
-    client.publish(
-        topic,
-        'nodejs mqtt test',
-        { qos: 1, retain: false },
-        (error) => {
-            if (error) {
-                console.error(error);
-            }
-        }
-    );
 });
 
 client.on('message', (topic, payload) => {
     console.log('Received Message:', topic, payload.toString());
-    var message = payload.toString();
-    if (topic == 'my/test/topic') {
-        filterTopic(topic, message);
-    } else if (topic1 == '/nodejs/albin') {
-        console.log(message);
+    if (topic == registerTopic) {
+        register(topic, payload);
     } else {
-        console.log('funkar ej');
-    }
-
-    function filterTopic(topic, message) {
-        if (topic == 'my/test/topic') {
-            messageFilter(topic, message);
-        } else {
-            console.log('nope');
-        }
-    }
-
-    function messageFilter(topic, message) {
-        if (message.includes('authorization')) {
-            let Flexiple = message;
-            let flexiplelist = Flexiple.split(' ');
-            let hello = flexiplelist[4];
-            let hello2 = hello.replace(',', '');
-            console.log(hello2);
-            console.log('works');
-        } else if (message == 'Erik') {
-            console.log(topic, 'Erik owes Albin Julmuuuuust!');
-        }
+        console.log('Topic not defined in code');
     }
 });
+
+async function register(topic, payload) {
+    try {
+        let o;
+        try {
+            o = JSON.parse(payload.toString());
+            const {
+                firstName,
+                lastName,
+                email,
+                password,
+                passwordCheck,
+                role,
+            } = o;
+
+            if (
+                !firstName ||
+                !lastName ||
+                !email ||
+                !password ||
+                !passwordCheck ||
+                !role
+            ) {
+                client.publish(
+                    'dentistimo/register-error',
+                    'not all fields have been entered'
+                );
+            }
+
+            const salt = await bcrypt.genSalt();
+            const passwordHash = await bcrypt.hash(password, salt);
+
+            const newUser = await new User({
+                firstName: firstName,
+                lastName: lastName,
+                email: email,
+                password: passwordHash,
+                role: role,
+            });
+            const savedUser = await newUser.save();
+
+            console.log(savedUser._id);
+
+
+        } catch (error) {
+            console.log(error);
+        }
+    } catch (error) {
+        console.log(error);
+    }
+}
 
 console.log('running...');
