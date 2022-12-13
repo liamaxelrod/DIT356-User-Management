@@ -1,12 +1,14 @@
 const mqtt = require('mqtt');
 require('dotenv').config();
-//const { auth, requiredScopes } = require('express-oauth2-jwt-bearer');
+var mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 
-//topics
-const topic = 'my/test/topic';
-const topic1 = '/nodejs/albin';
+const User = require('./models/user');
 
-//mqtt setup
+// Topics
+const registerTopic = 'dentistimo/register';
+
+// MQTT setup
 const port = '8883';
 const clientId = `mqtt_${Math.random().toString(16).slice(3)}`;
 const connectUrl = `mqtts://${process.env.MQTT_BROKER}:${port}`;
@@ -19,66 +21,88 @@ const client = mqtt.connect(connectUrl, {
     reconnectPeriod: 1000,
 });
 
-// This is the basic method for verifying the access token,
-// commented out to avoid eslint error because it's unused for now
-// const checkJwt = auth({
-//     audience: 'http://localhost/',
-//     issuerBaseURL: `https://dev-basqq6ug.eu.auth0.com/`,
-// });
+// Mongo setup
+var mongoURI = process.env.MONGODB_URI;
+mongoose.connect(
+    mongoURI,
+    { useNewUrlParser: true, useUnifiedTopology: true },
+    function (err) {
+        if (err) {
+            console.error(`Failed to connect to MongoDB with URI: ${mongoURI}`);
+            console.error(err.stack);
+            process.exit(1);
+        }
+        console.log(`Connected to MongoDB with URI: ${mongoURI}`);
+    }
+);
 
 client.on('connect', () => {
     console.log('Connected');
-    client.subscribe([topic], () => {
-        console.log(`Subscribe to topic '${topic}'`);
+    client.subscribe([registerTopic], () => {
+        console.log(`Subscribe to topic '${registerTopic}'`);
         console.log(clientId);
     });
-    client.subscribe([topic1], () => {
-        console.log(`Subscribe to topic '${topic1}'`);
-        console.log(clientId);
-    });
-    client.publish(
-        topic,
-        'nodejs mqtt test',
-        { qos: 1, retain: false },
-        (error) => {
-            if (error) {
-                console.error(error);
-            }
-        }
-    );
 });
 
 client.on('message', (topic, payload) => {
     console.log('Received Message:', topic, payload.toString());
-    var message = payload.toString();
-    if (topic == 'my/test/topic') {
-        filterTopic(topic, message);
-    } else if (topic1 == '/nodejs/albin') {
-        console.log(message);
+    if (topic == registerTopic) {
+        register(topic, payload);
     } else {
-        console.log('funkar ej');
-    }
-
-    function filterTopic(topic, message) {
-        if (topic == 'my/test/topic') {
-            messageFilter(topic, message);
-        } else {
-            console.log('nope');
-        }
-    }
-
-    function messageFilter(topic, message) {
-        if (message.includes('authorization')) {
-            let Flexiple = message;
-            let flexiplelist = Flexiple.split(' ');
-            let hello = flexiplelist[4];
-            let hello2 = hello.replace(',', '');
-            console.log(hello2);
-            console.log('works');
-        } else if (message == 'Erik') {
-            console.log(topic, 'Erik owes Albin Julmuuuuust!');
-        }
+        console.log('Topic not defined in code');
     }
 });
+
+async function register(topic, payload) {
+    try {
+        let o;
+        try {
+            o = JSON.parse(payload.toString());
+            const {
+                firstName,
+                lastName,
+                email,
+                password,
+                passwordCheck,
+                role,
+            } = o;
+
+            if (
+                !firstName ||
+                !lastName ||
+                !email ||
+                !password ||
+                !passwordCheck ||
+                !role
+            ) {
+                client.publish(
+                    'dentistimo/register-error',
+                    'not all fields have been entered'
+                );
+            }
+
+            const salt = await bcrypt.genSalt();
+            const passwordHash = await bcrypt.hash(password, salt);
+
+            const newUser = await new User({
+                firstName: firstName,
+                lastName: lastName,
+                email: email,
+                password: passwordHash,
+                role: role,
+            });
+            const savedUser = await newUser.save();
+
+            console.log(savedUser._id);
+            client.publish('dentistimo/register-success', savedUser._id);
+
+
+        } catch (error) {
+            console.log(error);
+        }
+    } catch (error) {
+        console.log(error);
+    }
+}
 
 console.log('running...');
