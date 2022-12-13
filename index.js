@@ -94,6 +94,7 @@ async function register(topic, payload) {
             const savedUser = await newUser.save();
 
             console.log(savedUser._id);
+            client.publish('dentistimo/register-success', savedUser._id);
 
 
         } catch (error) {
