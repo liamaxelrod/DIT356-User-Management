@@ -21,6 +21,7 @@
     "bcrypt": "^5.1.0",
     "dotenv": "^16.0.3",
     "eslint": "^8.29.0",
+    "jsonwebtoken": "^8.5.1",
     "mongoose": "^6.8.0",
     "mqtt": "^4.3.7",
     "nodemon": "^2.0.20",
