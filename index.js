@@ -146,7 +146,9 @@ async function login(topic, payload) {
             role: user.role,
         };
 
-        let token = jwt.sign(tokens, process.env.JWT_SECRET, { expiresIn: 3600 });
+        let token = jwt.sign(tokens, process.env.JWT_SECRET, {
+            expiresIn: 3600,
+        });
         console.log(token);
 
         client.publish(
