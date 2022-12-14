@@ -64,49 +64,41 @@ client.on('message', (topic, payload) => {
 
 async function register(topic, payload) {
     try {
-        let o;
-        try {
-            o = JSON.parse(payload.toString());
-            const {
-                firstName,
-                lastName,
-                email,
-                password,
-                passwordCheck,
-                role,
-            } = o;
+        let userInfo = JSON.parse(payload.toString());
+        const {
+            firstName,
+            lastName,
+            email,
+            password,
+            passwordCheck,
+        } = userInfo;
 
-            if (
-                !firstName ||
-                !lastName ||
-                !email ||
-                !password ||
-                !passwordCheck ||
-                !role
-            ) {
-                client.publish(
-                    'dentistimo/register-error',
-                    'not all fields have been entered'
-                );
-            }
-
-            const salt = await bcrypt.genSalt();
-            const passwordHash = await bcrypt.hash(password, salt);
-
-            const newUser = await new User({
-                firstName: firstName,
-                lastName: lastName,
-                email: email,
-                password: passwordHash,
-                role: role,
-            });
-            const savedUser = await newUser.save();
-
-            console.log(savedUser._id);
-            client.publish('dentistimo/register-success', savedUser._id);
-        } catch (error) {
-            console.log(error);
+        if (
+            !firstName ||
+            !lastName ||
+            !email ||
+            !password ||
+            !passwordCheck
+        ) {
+            client.publish(
+                'dentistimo/register-error',
+                'not all fields have been entered'
+            );
         }
+
+        const salt = await bcrypt.genSalt();
+        const passwordHash = await bcrypt.hash(password, salt);
+
+        const newUser = await new User({
+            firstName: firstName,
+            lastName: lastName,
+            email: email,
+            password: passwordHash,
+        });
+        const savedUser = await newUser.save();
+
+        console.log(savedUser._id);
+        client.publish('dentistimo/register-success', savedUser._id);
     } catch (error) {
         console.log(error);
     }
