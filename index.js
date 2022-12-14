@@ -3,6 +3,7 @@ require('dotenv').config();
 var mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+var validator = require('email-validator');
 
 const User = require('./models/user');
 
