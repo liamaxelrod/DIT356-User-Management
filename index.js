@@ -12,6 +12,8 @@ const User = require('./models/user');
 // Topics
 const registerTopic = 'dentistimo/register';
 const loginTopic = 'dentistimo/login';
+const modifyPasswordTopic = 'dentistimo/modify-password';
+
 
 let transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
@@ -65,6 +67,10 @@ client.on('connect', () => {
         console.log(`Subscribe to topic '${loginTopic}'`);
         console.log(clientId);
     });
+    client.subscribe([modifyPasswordTopic], () => {
+        console.log(`Subscribe to topic '${modifyPasswordTopic}'`);
+        console.log(clientId);
+    });
 });
 
 client.on('message', (topic, payload) => {
@@ -73,10 +79,11 @@ client.on('message', (topic, payload) => {
         register(topic, payload);
     } else if (topic == loginTopic) {
         login(topic, payload);
+    } else if (topic == modifyPasswordTopic) {
+        modifyPwd(topic, payload);
     } else {
-        console.log('Topic not defined in code');
-    }
-});
+        console.log('Topic not defined in code');}
+    });
 
 async function register(topic, payload) {
     try {
@@ -188,7 +195,7 @@ async function login(topic, payload) {
     }
 }
 
-//Method 2:   Change password
+//Method 1:   Change password
 async function modifyPwd(topic, payload) {
     try {
         const { id, oldpwd, newpwd } = JSON.parse(payload.toString());
@@ -216,24 +223,24 @@ async function modifyPwd(topic, payload) {
     }
 }
 
-    //Method 2:  Change password
-async function resetPwd(topic, payload) {
-    try {
-        const { email, usercode, password } = JSON.parse(payload.toString());
-        const user = await User.findOne({ email });
-        if (!user) return client.publish('dentistimo/not_this_email');
-        //TODO: Verify that the code is correct
-        
+//Method 2:  Change password
+// async function resetPwd(topic, payload) {
+//     try {
+//         const { email, usercode, password } = JSON.parse(payload.toString());
+//         const user = await User.findOne({ email });
+//         if (!user) return client.publish('dentistimo/not_this_email');
+//         //TODO: Verify that the code is correct
 
 
-        //Change password
-        const salt = await bcrypt.genSalt();
-        const passwordHash = await bcrypt.hash(password, salt);
-        const res = await User.updateOne({ email }, { password: passwordHash });
-        if (!res) return client.publish('dentistimo/resetPWD-error');
-        return client.publish('dentistimo/resetPWD-success');
-    } catch (error) {}
-}
+
+//         //Change password
+//         const salt = await bcrypt.genSalt();
+//         const passwordHash = await bcrypt.hash(password, salt);
+//         const res = await User.updateOne({ email }, { password: passwordHash });
+//         if (!res) return client.publish('dentistimo/resetPWD-error');
+//         return client.publish('dentistimo/resetPWD-success');
+//     } catch (error) { }
+// }
 
 
 
