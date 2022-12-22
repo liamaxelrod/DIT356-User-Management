@@ -23,7 +23,6 @@ This diagram shows the interaction and purpose of this component.
 ## Installation
 
 ```
-
 1. git clone 
 2. cd user-management
 3. npm i
