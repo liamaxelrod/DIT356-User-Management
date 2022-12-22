@@ -201,6 +201,7 @@ async function login(topic, payload) {
 
 //Method 1:   Change password
 async function modifyPassword(topic, payload) {
+
     try {
         const { idToken, oldPassword, newPassword } = JSON.parse(
             payload.toString()
@@ -211,6 +212,13 @@ async function modifyPassword(topic, payload) {
         if (!user) {
             throw new Error('User not found');
         }
+        if (newPassword.length < 8) {
+            return client.publish(
+                'dentistimo/reset-password/error',
+                'Password must be longer than 8 characters long'
+            );
+        }
+
         const isMatch = await bcrypt.compare(oldPassword, user.password);
         if (!isMatch) {
             throw new Error('Old password is incorrect');
