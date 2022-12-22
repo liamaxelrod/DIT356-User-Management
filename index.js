@@ -80,10 +80,11 @@ client.on('message', (topic, payload) => {
     } else if (topic == loginTopic) {
         login(topic, payload);
     } else if (topic == modifyPasswordTopic) {
-        modifyPwd(topic, payload);
+        modifyPassword(topic, payload);
     } else {
-        console.log('Topic not defined in code');}
-    });
+        console.log('Topic not defined in code');
+    }
+});
 
 async function register(topic, payload) {
     try {
@@ -196,30 +197,36 @@ async function login(topic, payload) {
 }
 
 //Method 1:   Change password
-async function modifyPwd(topic, payload) {
+async function modifyPassword(topic, payload) {
     try {
-        const { id, oldpwd, newpwd } = JSON.parse(payload.toString());
-
-        const user = await User.findOne({ _id: id });
-        const isMatch = await bcrypt.compare(oldpwd, user.password);
-        if (!isMatch) {
-            client.publish('old password error');
-            return;
+        const { idToken, oldPassword, newPassword } = JSON.parse(
+            payload.toString()
+        );
+        const decoded = jwt.verify(idToken, process.env.JWT_SECRET);
+        const userId = decoded.id;
+        const user = await User.findOne({ _id: userId });
+        if (!user) {
+            throw new Error('User not found');
         }
-
+        const isMatch = await bcrypt.compare(oldPassword, user.password);
+        if (!isMatch) {
+            throw new Error('Old password is incorrect');
+        }
         const salt = await bcrypt.genSalt();
-        const passwordHash = await bcrypt.hash(newpwd, salt);
-        const res = await User.updateOne(
-            { _id: id },
+        const passwordHash = await bcrypt.hash(newPassword, salt);
+        const updateResult = await User.updateOne(
+            { _id: userId },
             { password: passwordHash }
         );
-        if (!res) return client.publish('dentistimo/modifyPwd-success');
+        if (!updateResult) {
+            throw new Error('Failed to update password');
+        }
+        client.publish('dentistimo/modifyPwd-success', 'Reset successful');
     } catch (error) {
-        console.log('[resetPWD]', error);
-        return client.publish({
-            success: false,
-            msg: error,
-        });
+        console.error('[modifyPassword]', error);
+        client.publish('dentistimo/reset-password/error',
+            error.message,
+        );
     }
 }
 
