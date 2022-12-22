@@ -14,7 +14,6 @@ const registerTopic = 'dentistimo/register';
 const loginTopic = 'dentistimo/login';
 const modifyPasswordTopic = 'dentistimo/modify-password';
 
-
 let transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: 587,
@@ -132,8 +131,12 @@ async function register(topic, payload) {
                 JSON.stringify({ user: savedUser })
             );
 
-            sendEmail(transporter, email, 'Welcome to Dentistimo!', 'Thank you for registering!'); // Send an email to the newly registered user
-
+            sendEmail(
+                transporter,
+                email,
+                'Welcome to Dentistimo!',
+                'Thank you for registering!'
+            ); // Send an email to the newly registered user
         } catch (error) {
             console.log(error);
         }
@@ -238,8 +241,6 @@ async function modifyPassword(topic, payload) {
 //         if (!user) return client.publish('dentistimo/not_this_email');
 //         //TODO: Verify that the code is correct
 
-
-
 //         //Change password
 //         const salt = await bcrypt.genSalt();
 //         const passwordHash = await bcrypt.hash(password, salt);
@@ -248,7 +249,5 @@ async function modifyPassword(topic, payload) {
 //         return client.publish('dentistimo/resetPWD-success');
 //     } catch (error) { }
 // }
-
-
 
 console.log('running...');
