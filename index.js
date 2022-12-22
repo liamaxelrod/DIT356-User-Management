@@ -8,21 +8,9 @@ var validator = require('email-validator');
 const User = require('./models/user');
 
 // Topics
-const registerTopic = 'dentistimo/register';
-const loginTopic = 'dentistimo/login';
-
-// MQTT setup
-const port = '8883';
-const clientId = `mqtt_${Math.random().toString(16).slice(3)}`;
-const connectUrl = `mqtts://${process.env.MQTT_BROKER}:${port}`;
-const client = mqtt.connect(connectUrl, {
-    clientId,
-    clean: true,
-    connectTimeout: 4000,
-    username: process.env.MQTT_USER_ID,
-    password: process.env.MQTT_PASSWORD,
-    reconnectPeriod: 1000,
-});
+const registerTopic = 'dentistimo/register/';
+const registerTopicError = 'dentistimo/register/error/';
+const loginTopic = 'dentistimo/login/';
 
 // Mongo setup
 var mongoURI = process.env.MONGODB_URI;
@@ -39,68 +27,103 @@ mongoose.connect(
     }
 );
 
+// MQTT setup
+const port = '8883';
+const clientId = `mqtt_${Math.random().toString(16).slice(3)}`;
+const connectUrl = `mqtts://${process.env.MQTT_BROKER}:${port}`;
+const client = mqtt.connect(connectUrl, {
+    clientId,
+    clean: true,
+    connectTimeout: 4000,
+    username: process.env.MQTT_USER_ID,
+    password: process.env.MQTT_PASSWORD,
+    reconnectPeriod: 1000,
+});
+
 client.on('connect', () => {
-    console.log('Connected');
+    console.log('MQTT connected');
     client.subscribe([registerTopic], () => {
-        console.log(`Subscribe to topic '${registerTopic}'`);
-        console.log(clientId);
+        console.log(`Subscribed to topic '${registerTopic}'`);
     });
     client.subscribe([loginTopic], () => {
-        console.log(`Subscribe to topic '${loginTopic}'`);
-        console.log(clientId);
+        console.log(`Subscribed to topic '${loginTopic}'`);
     });
 });
 
 client.on('message', (topic, payload) => {
-    console.log('Received Message:', topic, payload.toString());
+    console.log('Received Message');
     if (topic == registerTopic) {
         register(topic, payload);
     } else if (topic == loginTopic) {
         login(topic, payload);
     } else {
-        console.log('Topic not defined in code');
+        console.log('Topic undefined');
     }
 });
 
 async function register(topic, payload) {
+    let userInfo = JSON.parse(payload.toString());
+    const { firstName, lastName, email, password, passwordCheck, requestId } =
+        userInfo;
+
+    if (!firstName || !lastName || !email || !password || !passwordCheck) {
+        return client.publish(
+            registerTopicError + requestId,
+            'All fields are required'
+        );
+    }
+
+    // Validate email address
+    if (!validator.validate(email)) {
+        return client.publish(
+            registerTopicError + requestId,
+            'Invalid email address'
+        );
+    }
+
+    // Check if email is already registered
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+        return client.publish(
+            registerTopicError + requestId,
+            'Email is already in use'
+        );
+    }
+
+    // Check if passwords match
+    if (password !== passwordCheck) {
+        return client.publish(
+            registerTopicError + requestId,
+            'Passwords do not match'
+        );
+    }
+
+    // Check if password is longer than 8 characters
+    if (password.length < 8) {
+        return client.publish(
+            registerTopicError + requestId,
+            'Password must be longer than 8 characters'
+        );
+    }
+
     try {
-        let userInfo = JSON.parse(payload.toString());
-        const {
+        const salt = await bcrypt.genSalt();
+        const passwordHash = await bcrypt.hash(password, salt);
+        const newUser = new User({
             firstName,
             lastName,
             email,
-            password,
-            passwordCheck,
-        } = userInfo;
-
-        if (
-            !firstName ||
-            !lastName ||
-            !email ||
-            !password ||
-            !passwordCheck
-        ) {
-            client.publish(
-                'dentistimo/register-error',
-                'not all fields have been entered'
-            );
-        }
-
-        const salt = await bcrypt.genSalt();
-        const passwordHash = await bcrypt.hash(password, salt);
-
-        const newUser = await new User({
-            firstName: firstName,
-            lastName: lastName,
-            email: email,
             password: passwordHash,
         });
         const savedUser = await newUser.save();
-
-        console.log(savedUser._id);
-        client.publish('dentistimo/register-success', savedUser._id);
+        client.publish(registerTopic + requestId, savedUser.toString());
+        console.log(savedUser);
     } catch (error) {
-        console.log(error);
+        console.error('[register]', error);
+        return client.publish(
+            registerTopicError + requestId,
+            'An unexpected error occurred'
+        );
     }
 }
 

@@ -6,7 +6,7 @@ const dentistSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true, minlength: 8 },
     company: { type: String, required: true},
-    description: { type: String }
+    description: { type: String },
 });
 
 module.exports = Dentist = mongoose.model('dentist', dentistSchema);
