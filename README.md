@@ -7,8 +7,11 @@ This is the user management component that is part of [Dentistimo](https://git.c
 Built with:
 
 [MQTT.js v4.3.7](https://github.com/mqttjs)
+
 [Node.js v18.12.1](https://nodejs.org/)
+
 [Mongoose v6.8.0](https://mongoosejs.com/)
+
 [bcrypt v5.1.0](https://www.npmjs.com/package/bcrypt?activeTab=readme)
 
 ## Visuals
