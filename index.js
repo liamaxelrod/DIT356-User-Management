@@ -187,4 +187,54 @@ async function login(topic, payload) {
         });
     }
 }
+
+//Method 2:   Change password
+async function modifyPwd(topic, payload) {
+    try {
+        const { id, oldpwd, newpwd } = JSON.parse(payload.toString());
+
+        const user = await User.findOne({ _id: id });
+        const isMatch = await bcrypt.compare(oldpwd, user.password);
+        if (!isMatch) {
+            client.publish('old password error');
+            return;
+        }
+
+        const salt = await bcrypt.genSalt();
+        const passwordHash = await bcrypt.hash(newpwd, salt);
+        const res = await User.updateOne(
+            { _id: id },
+            { password: passwordHash }
+        );
+        if (!res) return client.publish('dentistimo/modifyPwd-success');
+    } catch (error) {
+        console.log('[resetPWD]', error);
+        return client.publish({
+            success: false,
+            msg: error,
+        });
+    }
+}
+
+    //Method 2:  Change password
+async function resetPwd(topic, payload) {
+    try {
+        const { email, usercode, password } = JSON.parse(payload.toString());
+        const user = await User.findOne({ email });
+        if (!user) return client.publish('dentistimo/not_this_email');
+        //TODO: Verify that the code is correct
+        
+
+
+        //Change password
+        const salt = await bcrypt.genSalt();
+        const passwordHash = await bcrypt.hash(password, salt);
+        const res = await User.updateOne({ email }, { password: passwordHash });
+        if (!res) return client.publish('dentistimo/resetPWD-error');
+        return client.publish('dentistimo/resetPWD-success');
+    } catch (error) {}
+}
+
+
+
 console.log('running...');
