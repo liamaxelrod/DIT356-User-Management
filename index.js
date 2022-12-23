@@ -13,6 +13,8 @@ const User = require('./models/user');
 const registerTopic = 'dentistimo/register';
 const loginTopic = 'dentistimo/login';
 const modifyPasswordTopic = 'dentistimo/modify-password';
+const resetPasswordTopic = 'dentistimo/reset-password';
+const sendEmailcodeTopic = 'dentistimo/send-Emailcode';
 
 let transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
@@ -70,6 +72,14 @@ client.on('connect', () => {
         console.log(`Subscribe to topic '${modifyPasswordTopic}'`);
         console.log(clientId);
     });
+    client.subscribe([resetPasswordTopic], () => {
+        console.log(`Subscribe to topic '${resetPasswordTopic}'`);
+        console.log(clientId);
+    });
+    client.subscribe([sendEmailcodeTopic], () => {
+        console.log(`Subscribe to topic '${sendEmailcodeTopic}'`);
+        console.log(clientId);
+    });
 });
 
 client.on('message', (topic, payload) => {
@@ -80,6 +90,11 @@ client.on('message', (topic, payload) => {
         login(topic, payload);
     } else if (topic == modifyPasswordTopic) {
         modifyPassword(topic, payload);
+    } else if (topic == resetPasswordTopic) {
+        resetPassword(topic, payload);
+    }
+    else if (topic == sendEmailcodeTopic) {
+        sendEmailcode(topic, payload);
     } else {
         console.log('Topic not defined in code');
     }
@@ -232,7 +247,7 @@ async function modifyPassword(topic, payload) {
         if (!updateResult) {
             throw new Error('Failed to update password');
         }
-        client.publish('dentistimo/modifyPwd-success', 'Reset successful');
+        client.publish('dentistimo/modifyPassword-success', 'Reset successful');
     } catch (error) {
         console.error('[modifyPassword]', error);
         client.publish('dentistimo/reset-password/error',
@@ -242,20 +257,68 @@ async function modifyPassword(topic, payload) {
 }
 
 //Method 2:  Change password
-// async function resetPwd(topic, payload) {
-//     try {
-//         const { email, usercode, password } = JSON.parse(payload.toString());
-//         const user = await User.findOne({ email });
-//         if (!user) return client.publish('dentistimo/not_this_email');
-//         //TODO: Verify that the code is correct
+async function resetPassword(topic, payload) {
 
-//         //Change password
-//         const salt = await bcrypt.genSalt();
-//         const passwordHash = await bcrypt.hash(password, salt);
-//         const res = await User.updateOne({ email }, { password: passwordHash });
-//         if (!res) return client.publish('dentistimo/resetPWD-error');
-//         return client.publish('dentistimo/resetPWD-success');
-//     } catch (error) { }
-// }
+    try {
+        const { email, usercode, password } = JSON.parse(payload.toString());
+        const user = await User.findOne({ email });
+        if (!user) return client.publish('dentistimo/not_this_email');
+        //Verify that the code is correct
+        const results = await User.findOne({ email });
+        if (results.code === usercode)
+            return client.publish('dentistimo/code-error');
+        //Change password
+        const salt = await bcrypt.genSalt();
+        const passwordHash = await bcrypt.hash(password, salt);
+
+        if (newPassword.length < 8) {
+            return client.publish(
+                'dentistimo/reset-password/error',
+                'Password must be longer than 8 characters long'
+            );
+        }
+        const res = await User.updateOne({ email }, { password: passwordHash });
+        if (!res) return client.publish('dentistimo/resetPassword-error');
+        return client.publish('dentistimo/resetPassword-success', 'Reset successful');
+    } catch (error) {
+        console.error('[resetPassword]', error);
+        client.publish('dentistimo/reset-password/error',
+            error.message,
+        );
+    }
+}
+async function sendEmailcode(topic, payload) {
+    try {
+        const { email } = JSON.parse(payload.toString());
+        let code = '';
+        for (let i = 0; i < 6; i++) {
+            code += parseInt(Math.random() * 10);
+        }
+
+        let mailOptions = {
+            name: 'Dentistimo',
+            from: 'Dentistimo',
+            to: email,
+            subject: subject, // Subject line
+            text: code,
+            sendmail: true,
+        };
+        //??? 
+        const qwe = await User.updateOne({ email }, { code }, { upsert: true }); 
+        console.log(qwe);
+
+        await transporter.sendMail(mailOptions, (error) => {
+            if (error) {
+                return console.log(error);
+            }
+        });
+    } catch (error) {
+        console.error('[resetPassword]', error);
+        client.publish('dentistimo/reset-password/error',
+            error.message,
+        );
+    }
+}
+
 
 console.log('running...');
