@@ -1,31 +1,32 @@
-const mqtt = require('mqtt');
 require('dotenv').config();
+var mqtt = require('mqtt');
 var mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
+var bcrypt = require('bcrypt');
+var jwt = require('jsonwebtoken');
+var nodemailer = require('nodemailer');
+const { sendEmail } = require('./email.js');
 
+// Models
 const User = require('./models/user');
 
 // Topics
 const registerTopic = 'dentistimo/register';
 const loginTopic = 'dentistimo/login';
+const modifyPasswordTopic = 'dentistimo/modify-password';
+const resetPasswordTopic = 'dentistimo/reset-password';
+const sendEmailcodeTopic = 'dentistimo/send-Emailcode';
 
-// MQTT setup
-const port = '8883';
-const clientId = `mqtt_${Math.random().toString(16).slice(3)}`;
-const connectUrl = `mqtts://${process.env.MQTT_BROKER}:${port}`;
-const client = mqtt.connect(connectUrl, {
-    clientId,
-    clean: true,
-    connectTimeout: 4000,
-    username: process.env.USER_ID,
-    password: process.env.PASSWORD,
-    reconnectPeriod: 1000,
+const transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: 465,
+    secure: true,
+    auth: {
+        user: process.env.EMAIL_ADDRESS,
+        pass: process.env.EMAIL_PASSWORD,
+    },
 });
-
 // Mongo setup
-var mongoURI = process.env.MONGODB_URI
-    ;
+var mongoURI = process.env.MONGODB_URI;
 mongoose.connect(
     mongoURI,
     { useNewUrlParser: true, useUnifiedTopology: true },
@@ -39,6 +40,19 @@ mongoose.connect(
     }
 );
 
+// MQTT setup
+const port = '8883';
+const clientId = `mqtt_${Math.random().toString(16).slice(3)}`;
+const connectUrl = `mqtts://${process.env.MQTT_BROKER}:${port}`;
+const client = mqtt.connect(connectUrl, {
+    clientId,
+    clean: true,
+    connectTimeout: 4000,
+    username: process.env.MQTT_USER_ID,
+    password: process.env.MQTT_PASSWORD,
+    reconnectPeriod: 1000,
+});
+
 client.on('connect', () => {
     console.log('Connected');
     client.subscribe([registerTopic], () => {
@@ -49,6 +63,18 @@ client.on('connect', () => {
         console.log(`Subscribe to topic '${loginTopic}'`);
         console.log(clientId);
     });
+    client.subscribe([modifyPasswordTopic], () => {
+        console.log(`Subscribe to topic '${modifyPasswordTopic}'`);
+        console.log(clientId);
+    });
+    client.subscribe([resetPasswordTopic], () => {
+        console.log(`Subscribe to topic '${resetPasswordTopic}'`);
+        console.log(clientId);
+    });
+    client.subscribe([sendEmailcodeTopic], () => {
+        console.log(`Subscribe to topic '${sendEmailcodeTopic}'`);
+        console.log(clientId);
+    });
 });
 
 client.on('message', (topic, payload) => {
@@ -57,8 +83,14 @@ client.on('message', (topic, payload) => {
         register(topic, payload);
     } else if (topic == loginTopic) {
         login(topic, payload);
+    } else if (topic == modifyPasswordTopic) {
+        modifyPassword(topic, payload);
+    } else if (topic == resetPasswordTopic) {
+        resetPassword(topic, payload);
     }
-    else {
+    else if (topic == sendEmailcodeTopic) {
+        sendEmailcode(topic, payload);
+    } else {
         console.log('Topic not defined in code');
     }
 });
@@ -104,9 +136,17 @@ async function register(topic, payload) {
             const savedUser = await newUser.save();
 
             console.log(savedUser._id);
-            client.publish('dentistimo/register-success', savedUser._id);
+            client.publish(
+                'dentistimo/register-success',
+                JSON.stringify({ user: savedUser })
+            );
 
-
+            sendEmail(
+                transporter,
+                email,
+                'Welcome to Dentistimo!',
+                'Thank you for registering!'
+            ); // Send an email to the newly registered user
         } catch (error) {
             console.log(error);
         }
@@ -119,53 +159,173 @@ async function login(topic, payload) {
     try {
         const { email, password } = JSON.parse(payload.toString());
 
-        if (!email || !password) return client.publish(
-            'dentistimo/login-error',
-            'not all fields have been entered'
-        );
-       
+        if (!email || !password)
+            return client.publish(
+                'dentistimo/login-error',
+                'not all fields have been entered'
+            );
 
         const user = await User.findOne({ email });
         console.log(user);
 
-        if (!user) return client.publish(
-            'dentistimo/login-error',
-            'User name or password error'
-        );
-       
-
-        const isMatch =  await bcrypt.compare(password, user.password);
-        if (!isMatch) {
+        if (!user)
             return client.publish(
                 'dentistimo/login-error',
                 'User name or password error'
             );
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            client.publish(
+                'dentistimo/login-error',
+                'User name or password error'
+            );
+            return;
         }
 
-        // if (!bcrypt.compare(password, user.password)) return client.publish(
-        //     'dentistimo/login-error',
-        //     'User name or password error'
-        // );
-       
-
         const tokens = {
-            'id': user._id,
-            'email': user.email,
-            'firstName': user.firstName,
-            'lastName': user.lastName,
-            'role': user.role
+            id: user._id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            role: user.role,
         };
 
-        let token = jwt.sign(tokens, process.env.JWT, { 'expiresIn': 3600 });
+        let token = jwt.sign(tokens, process.env.JWT_SECRET, {
+            expiresIn: 3600,
+        });
         console.log(token);
 
-        client.publish('dentistimo/login-success', JSON.stringify({ token: token }));
+        client.publish(
+            'dentistimo/login-success',
+            JSON.stringify({ token: token })
+        );
     } catch (error) {
         console.log('[login]', error);
         return client.publish({
-            success: false,                
-            msg: error
+            success: false,
+            msg: error,
         });
     }
 }
+
+//Method 1:   Change password
+async function modifyPassword(topic, payload) {
+
+    try {
+        const { idToken, oldPassword, newPassword } = JSON.parse(
+            payload.toString()
+        );
+        const decoded = jwt.verify(idToken, process.env.JWT_SECRET);
+        const userId = decoded.id;
+        const user = await User.findOne({ _id: userId });
+        if (!user) {
+            throw new Error('User not found');
+        }
+        if (newPassword.length < 8) {
+            return client.publish(
+                'dentistimo/reset-password/error',
+                'Password must be longer than 8 characters long'
+            );
+        }
+
+        const isMatch = await bcrypt.compare(oldPassword, user.password);
+        if (!isMatch) {
+            throw new Error('Old password is incorrect');
+        }
+        const salt = await bcrypt.genSalt();
+        const passwordHash = await bcrypt.hash(newPassword, salt);
+        const updateResult = await User.updateOne(
+            { _id: userId },
+            { password: passwordHash }
+        );
+        if (!updateResult) {
+            throw new Error('Failed to update password');
+        }
+        client.publish('dentistimo/modifyPassword-success', 'Reset successful');
+    } catch (error) {
+        console.error('[modifyPassword]', error);
+        client.publish('dentistimo/reset-password/error',
+            error.message,
+        );
+    }
+}
+
+//Method 2:  Change password
+async function resetPassword(topic, payload) {
+    try {
+        let { email, userCode, newPassword } = JSON.parse(payload.toString());
+
+        let user = await User.findOne({ email });
+        if (!user) return client.publish('dentistimo/not_this_email');
+
+        //Verify that the code is correct
+        if (!user.code === userCode)
+            return client.publish('dentistimo/code-error');
+
+        if (newPassword.length < 8) {
+            return client.publish(
+                'dentistimo/reset-password/error',
+                'Password must be longer than 8 characters long'
+            );
+        }
+
+        //Change password
+        let salt = await bcrypt.genSalt();
+        let passwordHash = await bcrypt.hash(newPassword, salt);
+
+        console.log(user._id);
+
+        let updateResult = await User.updateOne(
+            { email },
+            { password: passwordHash }
+        );
+
+        if (!updateResult) return client.publish('dentistimo/resetPassword-error');
+        console.log(user.password);
+        return client.publish(
+            'dentistimo/resetPassword-success',
+            'Reset successful'
+        );
+    } catch (error) {
+        console.error('[resetPassword]', error);
+        client.publish('dentistimo/reset-password/error', error.message);
+    }
+}
+
+async function sendEmailcode(topic, payload) {
+    try {
+        const { email } = JSON.parse(payload.toString());
+        let code = '';
+        for (let i = 0; i < 6; i++) {
+            code += parseInt(Math.random() * 10);
+        }
+        console.log(code);
+        
+        let mailOptions = {
+            name: 'Dentistimo',
+            from: 'Dentistimo',
+            to: email,
+            subject: 'resert Password', // Subject line
+            text: code,
+            sendmail: true,
+        };
+        //??? 
+        const qwe = await User.updateOne({ email }, { code }, { upsert: true });
+        console.log(qwe);
+
+        await transporter.sendMail(mailOptions, (error) => {
+            if (error) {
+                return console.log(error);
+            }
+        });
+    } catch (error) {
+        console.error('[resetPassword]', error);
+        client.publish('dentistimo/reset-password/error',
+            error.message,
+        );
+    }
+}
+
+
 console.log('running...');
