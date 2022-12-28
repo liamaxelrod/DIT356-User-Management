@@ -171,7 +171,8 @@ async function login(topic, payload) {
                 'Not all fields have been entered'
             );
 
-        const user = await Dentist.findOne({ email: email });
+        //TODO ADD USER LOGIN, CURRENTLY ONLY DENTIST CAN LOGIN
+        const user = await Dentist.findOne({ email: email }); 
         console.log(user);
 
         if (!user)
