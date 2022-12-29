@@ -62,19 +62,19 @@ mongoose.connect(
 );
 
 // MQTT setup
-// const port = '8883';
-// const clientId = `mqtt_${Math.random().toString(16).slice(3)}`;
-// const connectUrl = `mqtts://${process.env.MQTT_BROKER}:${port}`;
-// const client = mqtt.connect(connectUrl, {
-//     clientId,
-//     clean: true,
-//     connectTimeout: 4000,
-//     username: process.env.MQTT_USER_ID,
-//     password: process.env.MQTT_PASSWORD,
-//     reconnectPeriod: 1000,
-// });
+const port = '8883';
+const clientId = `mqtt_${Math.random().toString(16).slice(3)}`;
+const connectUrl = `mqtts://${process.env.MQTT_BROKER}:${port}`;
+const client = mqtt.connect(connectUrl, {
+    clientId,
+    clean: true,
+    connectTimeout: 4000,
+    username: process.env.MQTT_USER_ID,
+    password: process.env.MQTT_PASSWORD,
+    reconnectPeriod: 1000,
+});
 
-const client = mqtt.connect('mqtt://localhost'); // For development only
+// const client = mqtt.connect('mqtt://localhost'); // For development only
 
 client.on('connect', () => {
     console.log('MQTT connected');
