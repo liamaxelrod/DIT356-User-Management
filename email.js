@@ -1,8 +1,9 @@
 module.exports = {
+    
     async sendEmail(transporter, recipient, subject, text) {
         let mailOptions = {
             name: 'Dentistimo',
-            from: '18359322033@163.com',
+            from: process.env.EMAIL_ADDRESS,
             to: recipient,
             subject: subject, // Subject line
             text: text,

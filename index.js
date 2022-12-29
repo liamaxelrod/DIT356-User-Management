@@ -5,26 +5,36 @@ const validator = require('email-validator');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
-//const { sendEmail } = require('./email.js');
+const { sendEmail } = require('./email.js');
+//const { verifyJWT } = require('./verifyJWT');
+const { generateUniqueUserId } = require('./helpers/generateId');
+
+const { hrtime } = require('process');
 
 // Models
 const User = require('./models/user');
 const Dentist = require('./models/dentist');
 
-// Topics
+// Register topics
 const registerUserTopic = 'dentistimo/register/user';
 const registerDentistTopic = 'dentistimo/register/dentist';
+const registerErrorTopic = 'dentistimo/register/error';
 
-const registerErrorTopic = 'dentistimo/register/error/';
-
+// Login topics
 const loginUserTopic = 'dentistimo/login/user';
 const loginDentistTopic = 'dentistimo/login/dentist';
+const loginErrorTopic = 'dentistimo/login/error';
 
-const loginErrorTopic = 'dentistimo/login/error/';
-
+// Modify and reset password topics
 const modifyPasswordTopic = 'dentistimo/modify-password';
-const resetPasswordTopic = 'dentistimo/reset-password';
-const sendEmailcodeTopic = 'dentistimo/send-Emailcode';
+const modifyPasswordErrorTopic = 'dentistimo/modify-password/error';
+
+const resetPasswordDentistTopic = 'dentistimo/reset-password/dentist';
+const resetPasswordUserTopic = 'dentistimo/reset-password/user';
+const resetPasswordErrorTopic = 'dentistimo/reset-password/error';
+
+const sendEmailCodeTopic = 'dentistimo/send-email-code';
+const sendEmailCodeErrorTopic = 'dentistimo/send-email-code/error';
 
 const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
@@ -35,6 +45,7 @@ const transporter = nodemailer.createTransport({
         pass: process.env.EMAIL_PASSWORD,
     },
 });
+
 // Mongo setup
 const mongoURI = process.env.MONGODB_URI;
 mongoose.connect(
@@ -51,63 +62,61 @@ mongoose.connect(
 );
 
 // MQTT setup
-const port = '8883';
-const clientId = `mqtt_${Math.random().toString(16).slice(3)}`;
-const connectUrl = `mqtts://${process.env.MQTT_BROKER}:${port}`;
-const client = mqtt.connect(connectUrl, {
-    clientId,
-    clean: true,
-    connectTimeout: 4000,
-    username: process.env.MQTT_USER_ID,
-    password: process.env.MQTT_PASSWORD,
-    reconnectPeriod: 1000,
-});
+// const port = '8883';
+// const clientId = `mqtt_${Math.random().toString(16).slice(3)}`;
+// const connectUrl = `mqtts://${process.env.MQTT_BROKER}:${port}`;
+// const client = mqtt.connect(connectUrl, {
+//     clientId,
+//     clean: true,
+//     connectTimeout: 4000,
+//     username: process.env.MQTT_USER_ID,
+//     password: process.env.MQTT_PASSWORD,
+//     reconnectPeriod: 1000,
+// });
+
+const client = mqtt.connect('mqtt://localhost'); // For development only
 
 client.on('connect', () => {
     console.log('MQTT connected');
-    client.subscribe([registerUserTopic], () => {
-        console.log(`Subscribed to topic '${registerUserTopic}'`);
-    });
-    client.subscribe([registerDentistTopic], () => {
-        console.log(`Subscribed to topic '${registerDentistTopic}'`);
-    });
-    client.subscribe([loginUserTopic], () => {
-        console.log(`Subscribed to topic '${loginUserTopic}'`);
-    });
-    client.subscribe([loginDentistTopic], () => {
-        console.log(`Subscribed to topic '${loginDentistTopic}'`);
-    });
-    client.subscribe([modifyPasswordTopic], () => {
-        console.log(`Subscribe to topic '${modifyPasswordTopic}'`);
-    });
-    client.subscribe([resetPasswordTopic], () => {
-        console.log(`Subscribe to topic '${resetPasswordTopic}'`);
-    });
-    client.subscribe([sendEmailcodeTopic], () => {
-        console.log(`Subscribe to topic '${sendEmailcodeTopic}'`);
+
+    const topics = [
+        registerUserTopic,
+        registerDentistTopic,
+        loginUserTopic,
+        loginDentistTopic,
+        modifyPasswordTopic,
+        resetPasswordDentistTopic,
+        resetPasswordUserTopic,
+        sendEmailCodeTopic,
+    ];
+
+    topics.forEach((topic) => {
+        client.subscribe(topic, { qos: 2 }, () => {
+            console.log(`Subscribed to topic '${topic}'`);
+        });
     });
 });
 
-client.on('message', (topic, payload) => {
+client.on('message', async (topic, payload) => {
+    console.log(JSON.parse(payload.toString()).email);
     switch (topic) {
-        case registerUserTopic:
-            registerUser(topic, payload);
-            break;
         case registerDentistTopic:
-            registerDentist(topic, payload);
+        case registerUserTopic:
+            await registerUser(topic, payload);
             break;
         case loginDentistTopic:
         case loginUserTopic:
-            login(topic, payload); // Use same login method if user or dentist
+            login(topic, payload);
             break;
         case modifyPasswordTopic:
             modifyPassword(topic, payload);
             break;
-        case resetPasswordTopic:
+        case resetPasswordDentistTopic:
+        case resetPasswordUserTopic:
             resetPassword(topic, payload);
             break;
-        case sendEmailcodeTopic:
-            sendEmailcode(topic, payload);
+        case sendEmailCodeTopic:
+            sendEmailCode(topic, payload);
             break;
         default:
             console.log('Undefined topic');
@@ -115,305 +124,393 @@ client.on('message', (topic, payload) => {
 });
 
 async function registerUser(topic, payload) {
-    let userInfo = JSON.parse(payload.toString());
-    let { firstName, lastName, email, password, passwordCheck, requestId } =
+    const start = hrtime();
+    // Parse the payload and extract the user information
+    const userInfo = JSON.parse(payload.toString());
+    const { firstName, lastName, email, password, passwordCheck, requestId } =
         userInfo;
-
-    if (!firstName || !lastName || !email || !password || !passwordCheck) {
-        return client.publish(
-            registerErrorTopic + requestId,
-            'All fields are required'
-        );
-    }
-
-    // Validate email address
-    if (!validator.validate(email)) {
-        return client.publish(
-            registerErrorTopic + requestId,
-            'Invalid email address'
-        );
-    }
-
-    // Check if email is already registered
-    let existingUser = await User.findOne({ email });
-    if (existingUser) {
-        return client.publish(
-            registerErrorTopic + requestId,
-            'Email is already in use'
-        );
-    }
-
-    // Check if passwords match
-    if (password !== passwordCheck) {
-        return client.publish(
-            registerErrorTopic + requestId,
-            'Passwords do not match'
-        );
-    }
-
-    // Check if password is longer than 8 characters
-    if (password.length < 8) {
-        return client.publish(
-            registerErrorTopic + requestId,
-            'Password must be longer than 8 characters long'
-        );
-    }
+    let officeId;
 
     try {
-        let salt = await bcrypt.genSalt();
-        let passwordHash = await bcrypt.hash(password, salt);
-        let newUser = new User({
-            firstName,
-            lastName,
-            email,
-            password: passwordHash,
-        });
-        let savedUser = await newUser.save();
-        client.publish(
-            registerUserTopic + '/' + requestId,
-            JSON.stringify({
-                firstName: savedUser.firstName,
-                lastName: savedUser.lastName,
-                email: savedUser.email,
-            })
-        );
+        // If the topic is registerDentistTopic, extract the officeId field from the payload
+        if (topic === registerDentistTopic) {
+            officeId = userInfo.officeId;
+
+            // Validate the officeId field
+            if (!officeId) {
+                const error = new Error('Office is required');
+                client.publish(
+                    `${registerErrorTopic}/${requestId}`,
+                    error.message
+                );
+                throw error;
+            }
+        }
+
+        // Validate the rest of the input fields
+        if (!firstName || !lastName || !email || !password || !passwordCheck) {
+            const error = new Error('All fields are required');
+            client.publish(`${registerErrorTopic}/${requestId}`, error.message);
+            throw error;
+        }
+        if (!validator.validate(email)) {
+            const error = new Error('Invalid email address');
+            client.publish(`${registerErrorTopic}/${requestId}`, error.message);
+            throw error;
+        }
+        if (password !== passwordCheck) {
+            const error = new Error('Passwords do not match');
+            client.publish(`${registerErrorTopic}/${requestId}`, error.message);
+            throw error;
+        }
+        if (password.length < 8) {
+            const error = new Error(
+                'Password must be longer than 8 characters long'
+            );
+            client.publish(`${registerErrorTopic}/${requestId}`, error.message);
+            throw error;
+        }
+
+        // Check if email is already registered
+        let existingUser;
+        if (topic === registerDentistTopic) {
+            existingUser = await Dentist.findOne({ email });
+        } else {
+            existingUser = await User.findOne({ email });
+        }
+        if (existingUser) {
+            const error = new Error('Email is already in use');
+            client.publish(`${registerErrorTopic}/${requestId}`, error.message);
+            throw error;
+        }
+
+        // Hash password and create new user
+        const salt = await bcrypt.genSalt();
+        const passwordHash = await bcrypt.hash(password, salt);
+        let newUser;
+        if (topic == registerDentistTopic) {
+            let dentistId = await generateUniqueUserId(10, true);
+            console.log(dentistId);
+            newUser = new Dentist({
+                dentistId,
+                firstName,
+                lastName,
+                email,
+                password: passwordHash,
+                officeId,
+            });
+        } else {
+            let userId = await generateUniqueUserId(10, false);
+            console.log(userId);
+            newUser = new User({
+                userId,
+                firstName,
+                lastName,
+                email,
+                password: passwordHash,
+            });
+        }
+
+        const savedUser = await newUser.save();
+
+        // Publish success or error message
+        if (topic == registerDentistTopic) {
+            client.publish(
+                `${registerDentistTopic}/${requestId}`,
+                JSON.stringify({
+                    firstName: savedUser.firstName,
+                    lastName: savedUser.lastName,
+                    email: savedUser.email,
+                    officeId: savedUser.officeId,
+                })
+            );
+        } else {
+            client.publish(
+                `${registerUserTopic}/${requestId}`,
+                JSON.stringify({
+                    firstName: savedUser.firstName,
+                    lastName: savedUser.lastName,
+                    email: savedUser.email,
+                })
+            );
+        }
+        const end = hrtime(start);
+        const elapsedTimeInSeconds = end[0] + end[1] / 1e9;
+        console.log(`Elapsed time: ${elapsedTimeInSeconds} seconds`);
     } catch (error) {
-        console.error('[register]', error);
-        return client.publish(
-            registerErrorTopic + requestId,
-            'An unexpected error occurred'
-        );
-    }
-}
-
-async function registerDentist(topic, payload) {
-    let userInfo = JSON.parse(payload.toString());
-    let {
-        firstName,
-        lastName,
-        email,
-        password,
-        passwordCheck,
-        companyName,
-        requestId,
-    } = userInfo;
-
-    if (
-        !firstName ||
-        !lastName ||
-        !email ||
-        !password ||
-        !passwordCheck ||
-        !companyName
-    ) {
-        return client.publish(
-            registerErrorTopic + requestId,
-            'All fields are required'
-        );
-    }
-
-    // Validate email address
-    if (!validator.validate(email)) {
-        return client.publish(
-            registerErrorTopic + requestId,
-            'Invalid email address'
-        );
-    }
-
-    // Check if email is already registered
-    let existingUser = await Dentist.findOne({ email: email });
-    if (existingUser) {
-        return client.publish(
-            registerErrorTopic + requestId,
-            'Email is already in use'
-        );
-    }
-
-    // Check if passwords match
-    if (password !== passwordCheck) {
-        return client.publish(
-            registerErrorTopic + requestId,
-            'Passwords do not match'
-        );
-    }
-
-    // Check if password is longer than 8 characters
-    if (password.length < 8) {
-        return client.publish(
-            registerErrorTopic + requestId,
-            'Password must be longer than 8 characters long'
-        );
-    }
-
-    try {
-        let salt = await bcrypt.genSalt();
-        let passwordHash = await bcrypt.hash(password, salt);
-        let newDentist = new Dentist({
-            firstName,
-            lastName,
-            email,
-            password: passwordHash,
-            companyName,
-        });
-        let savedDentist = await newDentist.save();
-        client.publish(
-            registerDentistTopic + '/' + requestId,
-            JSON.stringify({
-                firstName: savedDentist.firstName,
-                lastName: savedDentist.lastName,
-                email: savedDentist.email,
-                companyName: savedDentist.companyName,
-            })
-        );
-    } catch (error) {
-        console.error('[register]', error);
-        return client.publish(
-            registerErrorTopic + requestId,
-            'An unexpected error occurred'
-        );
+        console.error('[register error]', error.message);
     }
 }
 
 async function login(topic, payload) {
+    // Parse the payload and extract the email, password, and requestId
+    let user;
+    const { email, password, requestId } = JSON.parse(payload.toString());
     try {
-        let user;
-        let role;
-        let { email, password, requestId } = JSON.parse(payload.toString());
+        // Check if the email and password fields are present
+        if (!email || !password) {
+            // If either field is missing, throw an error and publish an error message
+            const error = new Error('All fields are required');
+            client.publish(`${loginErrorTopic}/${requestId}`, error.message);
+            throw error;
+        }
 
-        if (!email || !password)
-            return client.publish(
-                loginErrorTopic + requestId,
-                'not all fields have been entered'
-            );
-
+        // Check if the topic is for user or dentist logins
         if (topic == loginUserTopic) {
+            // If the topic is for user logins, find the user with the matching email
             user = await User.findOne({ email });
-        } else {
-            user = await Dentist.findOne({ email });
-        }
+            // If no user is found, throw an error and publish an error message
+            if (!user) {
+                const error = new Error('User name or password');
+                client.publish(
+                    `${loginErrorTopic}/${requestId}`,
+                    error.message
+                );
+                throw error;
+            }
 
-        if (!user)
-            return client.publish(
-                loginErrorTopic + requestId,
-                'User name or password error'
-            );
+            // Validate the password
+            let isMatch = await bcrypt.compare(password, user.password);
+            // If the password is invalid, throw an error and publish an error message
+            if (!isMatch) {
+                const error = new Error('User name or password');
+                client.publish(
+                    `${loginErrorTopic}/${requestId}`,
+                    error.message
+                );
+                throw error;
+            }
 
-        let isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return client.publish(
-                loginErrorTopic + requestId,
-                'User name or password error'
-            );
-        }
+            // Create the JWT tokens object
+            let tokens = {
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: 'User',
+            };
 
-        if (topic == loginUserTopic) {
-            role = 'User';
-        } else {
-            role = 'Dentist';
-        }
+            // Sign the JWT token
+            let token = jwt.sign(tokens, process.env.JWT_SECRET, {
+                issuer: 'Dentistimo-User-Management',
+                audience: user._id.toString(),
+                expiresIn: 3600,
+            });
 
-        let tokens = {
-            id: user._id,
-            email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            role: role,
-        };
-
-        let token = jwt.sign(tokens, process.env.JWT_SECRET, {
-            issuer: 'Dentistimo-User-Management',
-            audience: user._id.toString(),
-            expiresIn: 3600,
-        });
-
-        if (topic == loginUserTopic) {
+            // Publish the login success message with the JWT token
             client.publish(
-                loginUserTopic + '/' + requestId,
+                `${loginUserTopic}/${requestId}`,
                 JSON.stringify({
                     IdToken: token,
                     firstName: user.firstName,
                     lastName: user.lastName,
                     email: user.email,
+                    userId: user.userId,
                 })
             );
-        } else {
+        } else if (topic == loginDentistTopic) {
+            // If the topic is for dentist logins, find the dentist with the matching email
+            user = await Dentist.findOne({ email });
+            // If no dentist is found, throw an error and publish an error message
+            if (!user) {
+                const error = new Error('User name or password');
+                client.publish(
+                    `${loginErrorTopic}/${requestId}`,
+                    error.message
+                );
+                throw error;
+            }
+
+            // Validate the password
+            let isMatch = await bcrypt.compare(password, user.password);
+            // If the password is invalid, throw an error and publish an error message
+            if (!isMatch) {
+                const error = new Error('User name or password');
+                client.publish(
+                    `${loginErrorTopic}/${requestId}`,
+                    error.message
+                );
+                throw error;
+            }
+
+            // Create the JWT tokens object
+            let tokens = {
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: 'Dentist',
+            };
+
+            // Sign the JWT token
+            let token = jwt.sign(tokens, process.env.JWT_SECRET, {
+                issuer: 'Dentistimo-User-Management',
+                audience: user._id.toString(),
+                expiresIn: 3600,
+            });
+
+            // Publish the login success message with the JWT token and company name
             client.publish(
-                loginDentistTopic + '/' + requestId,
+                `${loginDentistTopic}/${requestId}`,
                 JSON.stringify({
                     IdToken: token,
                     firstName: user.firstName,
                     lastName: user.lastName,
                     email: user.email,
-                    companyName: user.companyName,
+                    officeId: user.officeId,
+                    dentistId: user.dentistId,
                 })
             );
         }
     } catch (error) {
-        console.log('[login]', error);
-        return client.publish(
-            loginErrorTopic + requestId,
-            JSON.stringify({
-                success: false,
-                msg: error,
-            })
-        );
+        // Log any errors that occur
+        console.log('[login]', error.message);
     }
 }
 
-//Method 1:   Change password
 async function modifyPassword(topic, payload) {
+    // Parse the payload into an object.
+    let { idToken, oldPassword, newPassword } = JSON.parse(payload.toString());
+
+    let userId;
+    let decoded;
+
     try {
-        let { idToken, oldPassword, newPassword } = JSON.parse(
-            payload.toString()
-        );
-        let decoded = jwt.verify(idToken, process.env.JWT_SECRET);
-        let userId = decoded.id;
-        let user = await User.findOne({ _id: userId });
-        if (!user) {
-            throw new Error('User not found');
+        // Check if the email and password fields are present
+        if (!idToken || !oldPassword || !newPassword) {
+            // If either field is missing, throw an error and publish an error message
+            const error = new Error('All fields are required');
+            client.publish(
+                `${modifyPasswordErrorTopic}/${idToken}`,
+                error.message
+            );
+            throw error;
         }
+
+        try {
+            // Verify the idToken to retrieve the user's id.
+            decoded = jwt.verify(idToken, process.env.JWT_SECRET); // TODO CHANGE TO THE verifyJWT.js METHOD
+            console.log(decoded);
+            userId = decoded.aud;
+            console.log(userId);
+        } catch (error) {
+            // If the idToken is invalid, throw an error.
+            const invalidIdTokenError = new Error('Invalid idToken');
+            client.publish(
+                `${modifyPasswordErrorTopic}/${idToken}`,
+                invalidIdTokenError.message
+            );
+            throw invalidIdTokenError;
+        }
+
+        // Find the user in the database.
+        if (decoded.role == 'User') {
+            user = await User.findOne({ _id: userId });
+        } else {
+            user = await Dentist.findOne({ _id: userId });
+        }
+
+        if (!user) {
+            // If the user is not found, throw an error.
+            const error = new Error('User not found');
+            client.publish(
+                `${modifyPasswordErrorTopic}/${idToken}`,
+                error.message
+            );
+            throw error;
+        }
+
+        // Check that the new password is at least 8 characters long.
         if (newPassword.length < 8) {
-            return client.publish(
-                'dentistimo/reset-password/error',
-                'Password must be longer than 8 characters long'
+            const error = new Error(
+                'Password must be longer than 8 characters'
+            );
+            client.publish(
+                `${modifyPasswordErrorTopic}/${idToken}`,
+                error.message
+            );
+            throw error;
+        }
+
+        // Compare the provided old password with the user's hashed password in the database.
+        let isMatch = await bcrypt.compare(oldPassword, user.password);
+        if (!isMatch) {
+            // If the passwords do not match, throw an error.
+            const error = new Error('Password is incorrect');
+            client.publish(
+                `${modifyPasswordErrorTopic}/${idToken}`,
+                error.message
+            );
+            throw error;
+        }
+
+        // Hash the new password.
+        let salt = await bcrypt.genSalt();
+        let passwordHash = await bcrypt.hash(newPassword, salt);
+        let updateResult;
+
+        // Update the user's password in the database.
+        if (decoded.role == 'User') {
+            updateResult = await User.updateOne(
+                { _id: userId },
+                { password: passwordHash }
+            );
+        } else {
+            updateResult = await Dentist.updateOne(
+                { _id: userId },
+                { password: passwordHash }
             );
         }
 
-        let isMatch = await bcrypt.compare(oldPassword, user.password);
-        if (!isMatch) {
-            throw new Error('Old password is incorrect');
-        }
-        let salt = await bcrypt.genSalt();
-        let passwordHash = await bcrypt.hash(newPassword, salt);
-        let updateResult = await User.updateOne(
-            { _id: userId },
-            { password: passwordHash }
-        );
         if (!updateResult) {
-            throw new Error('Failed to update password');
+            // If the update was unsuccessful, throw an error.
+            const error = new Error('Failed to update password');
+            client.publish(
+                `${modifyPasswordErrorTopic}/${idToken}`,
+                error.message
+            );
+            throw error;
         }
-        client.publish('dentistimo/modifyPassword-success', 'Reset successful');
+
+        // If the password change was successful, publish a message to the modifyPasswordTopic.
+        client.publish(`${modifyPasswordTopic}/${idToken}`, 'Reset successful');
     } catch (error) {
-        console.error('[modifyPassword]', error);
-        client.publish('dentistimo/reset-password/error', error.message);
+        // Log the errors.
+        console.error('[modifyPassword]', error.message);
     }
 }
 
 //Method 2:  Change password
 async function resetPassword(topic, payload) {
+    let { email, userCode, newPassword, requestId } = JSON.parse(
+        payload.toString()
+    );
     try {
-        let { email, userCode, newPassword } = JSON.parse(payload.toString());
-
-        let user = await User.findOne({ email });
-        if (!user) return client.publish('dentistimo/not_this_email');
-
+        // Check if email is already registered
+        let user;
+        if (topic === registerDentistTopic) {
+            user = await Dentist.findOne({ email });
+        } else {
+            user = await User.findOne({ email });
+        }
+        if (!user) {
+            const error = new Error('Invalid email');
+            client.publish(
+                `${resetPasswordErrorTopic}/${requestId}`,
+                error.message
+            );
+            throw error;
+        }
+        console.log('user.code: ' + user.code);
+        console.log('userCode: ' + userCode);
         //Verify that the code is correct
-        if (!user.code === userCode)
-            return client.publish('dentistimo/code-error');
+        if (user.code != userCode)
+            return client.publish(
+                `${resetPasswordErrorTopic}/${requestId}`,
+                'Invalid code'
+            );
 
         if (newPassword.length < 8) {
             return client.publish(
-                'dentistimo/reset-password/error',
+                `${resetPasswordErrorTopic}/${requestId}`,
                 'Password must be longer than 8 characters long'
             );
         }
@@ -424,53 +521,80 @@ async function resetPassword(topic, payload) {
 
         console.log(user._id);
 
-        let updateResult = await User.updateOne(
-            { email },
-            { password: passwordHash }
-        );
-
-        if (!updateResult)
-            return client.publish('dentistimo/resetPassword-error');
+        let updateResult;
+        if (topic === resetPasswordDentistTopic) {
+            updateResult = await Dentist.findOneAndUpdate(
+                { email: email },
+                { password: passwordHash }
+            );
+            console.log(updateResult);
+        } else if (topic === resetPasswordUserTopic) {
+            updateResult = await User.findOneAndUpdate(
+                { email: email },
+                { password: passwordHash },
+                { new: true, upsert: true }
+            );
+            console.log(updateResult);
+        }
+        if (!updateResult) {
+            console.log(updateResult);
+            return client.publish(
+                `${resetPasswordErrorTopic}/${requestId}`,
+                'Reset failed'
+            );
+        }
         console.log(user.password);
-        return client.publish(
-            'dentistimo/resetPassword-success',
-            'Reset successful'
-        );
+
+        if (topic === resetPasswordDentistTopic) {
+            return client.publish(
+                `${resetPasswordDentistTopic}/${requestId}`,
+                'Reset successful'
+            );
+        } else if (topic === resetPasswordUserTopic) {
+            return client.publish(
+                `${resetPasswordUserTopic}/${requestId}`,
+                'Reset successful'
+            );
+        }
     } catch (error) {
         console.error('[resetPassword]', error);
-        client.publish('dentistimo/reset-password/error', error.message);
     }
 }
 
-async function sendEmailcode(topic, payload) {
+async function sendEmailCode(topic, payload) {
+    let { email, requestId } = JSON.parse(payload.toString());
     try {
-        let { email } = JSON.parse(payload.toString());
+        let user = await User.findOne({ email });
+        if (!user)
+            return client.publish(
+                `${sendEmailCodeTopic}/${requestId}`,
+                'An email has been sent if there is an account associated with that email'
+            );
+
         let code = '';
         for (let i = 0; i < 6; i++) {
             code += parseInt(Math.random() * 10);
         }
-        console.log(code);
+        console.log('Code is: ' + code);
 
-        let mailOptions = {
-            name: 'Dentistimo',
-            from: 'Dentistimo',
-            to: email,
-            subject: 'resert Password', // Subject line
-            text: code,
-            sendmail: true,
-        };
-        //???
-        let qwe = await User.updateOne({ email }, { code }, { upsert: true });
-        console.log(qwe);
+        sendEmail(
+            transporter,
+            email,
+            'Reset password',
+            'Heres the code for resetting your password:' + code
+        );
 
-        await transporter.sendMail(mailOptions, (error) => {
-            if (error) {
-                return console.log(error);
-            }
-        });
+        await User.updateOne({ email }, { code }, { upsert: true });
+        return client.publish(
+            `${sendEmailCodeTopic}/${requestId}`,
+            'An email has been sent if there is an account associated with that email'
+        );
     } catch (error) {
-        console.error('[resetPassword]', error);
-        client.publish('dentistimo/reset-password/error', error.message);
+        console.error('[Send code]', error);
+        client.publish(
+            `${sendEmailCodeErrorTopic}/${requestId}`,
+            error.message
+        );
     }
 }
 
