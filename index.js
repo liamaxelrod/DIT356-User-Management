@@ -84,7 +84,7 @@ client.on('connect', () => {
         registerDentistTopic,
         loginUserTopic,
         loginDentistTopic,
-        modifyPasswordTopic,
+        modifyUserTopic,
         resetPasswordDentistTopic,
         resetPasswordUserTopic,
         sendEmailCodeTopic,
@@ -108,8 +108,8 @@ client.on('message', async (topic, payload) => {
         case loginUserTopic:
             login(topic, payload);
             break;
-        case modifyPasswordTopic:
-            modifyPassword(topic, payload);
+        case modifyUserTopic:
+            modifyUser(topic, payload);
             break;
         case resetPasswordDentistTopic:
         case resetPasswordUserTopic:
@@ -366,7 +366,7 @@ async function login(topic, payload) {
     }
 }
 
-async function modifyPassword(topic, payload) {
+async function modifyUser(topic, payload) {
     // Parse the payload into an object.
     let { idToken, oldPassword, newPassword, firstName, lastName, email, officeId } =
         JSON.parse(payload.toString());
