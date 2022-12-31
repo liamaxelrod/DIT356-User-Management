@@ -368,8 +368,15 @@ async function login(topic, payload) {
 
 async function modifyUser(topic, payload) {
     // Parse the payload into an object.
-    let { idToken, oldPassword, newPassword, firstName, lastName, email, officeId } =
-        JSON.parse(payload.toString());
+    let {
+        idToken,
+        oldPassword,
+        newPassword,
+        firstName,
+        lastName,
+        email,
+        officeId,
+    } = JSON.parse(payload.toString());
     let user;
 
     try {
@@ -378,10 +385,7 @@ async function modifyUser(topic, payload) {
             // If the idToken field is missing, throw an error and publish an error
             // message
             const error = new Error('idToken is required');
-            client.publish(
-                `${modifyUserErrorTopic}/${idToken}`,
-                error.message
-            );
+            client.publish(`${modifyUserErrorTopic}/${idToken}`, error.message);
             throw error;
         }
 
@@ -395,10 +399,7 @@ async function modifyUser(topic, payload) {
         if (!user) {
             // If the user is not found, throw an error.
             const error = new Error('User not found');
-            client.publish(
-                `${modifyUserErrorTopic}/${idToken}`,
-                error.message
-            );
+            client.publish(`${modifyUserErrorTopic}/${idToken}`, error.message);
             throw error;
         }
 
@@ -407,60 +408,74 @@ async function modifyUser(topic, payload) {
             const error = new Error(
                 'Password must be longer than 8 characters'
             );
-            client.publish(
-                `${modifyUserErrorTopic}/${idToken}`,
-                error.message
-            );
+            client.publish(`${modifyUserErrorTopic}/${idToken}`, error.message);
             throw error;
         }
-        // If the old password field is provided, compare it with the user's hashed password in the database.
-        if (oldPassword) {
-            let isMatch = await comparePasswords(user, oldPassword);
-            if (!isMatch) {
-                // If the passwords do not match, throw an error.
-                const error = new Error('Password is incorrect');
-                client.publish(
-                    `${modifyUserErrorTopic}/${idToken}`,
-                    error.message
-                );
-                throw error;
-            }
+
+        // Compare the provided password with the user's hashed password in the database.
+        let isMatch = await comparePasswords(user, oldPassword);
+        if (!isMatch) {
+            // If the passwords do not match, throw an error.
+            const error = new Error('Password is incorrect');
+            client.publish(`${modifyUserErrorTopic}/${idToken}`, error.message);
+            throw error;
         }
 
+        let newPasswordHash;
         // Hash the new password if it is provided.
         if (newPassword) {
             let salt = await bcrypt.genSalt();
             newPasswordHash = await bcrypt.hash(newPassword, salt);
         }
 
-        let updateResult;
-
         // Update the user in the database with the provided data.
+        let updateResult;
+        const options = { new: true };
         if (decoded.role == 'User') {
             updateResult = await User.findOneAndUpdate(
                 { _id: userId },
-                { firstName, lastName, email, password: newPasswordHash }
+                { firstName, lastName, email, password: newPasswordHash },
+                options
             );
         } else {
             updateResult = await Dentist.findOneAndUpdate(
                 { _id: userId },
-                { firstName, lastName, email, password: newPasswordHash, officeId }
+                {
+                    firstName,
+                    lastName,
+                    email,
+                    password: newPasswordHash,
+                    officeId,
+                },
+                options
             );
         }
+
+        updateresult2 = await updateResult.save();
+        console.log(updateresult2);
 
         if (!updateResult) {
             // If the update was unsuccessful, throw an error.
             const error = new Error('Failed to update user');
             client.publish(
                 `${modifyUserErrorTopic}/${idToken}`,
-                error.message
+                JSON.stringify({
+                    updateStatus: 'Update failed',
+                    error: error.message,
+                })
             );
             throw error;
         }
         // If the update was successful, publish a message to the modifyPasswordTopic.
         client.publish(
             `${modifyUserTopic}/${idToken}`,
-            'Update successful'
+            JSON.stringify({
+                updateStatus: 'Update successful',
+                firstName: updateresult2.firstName,
+                lastName: updateresult2.lastName,
+                email: updateresult2.email,
+                officeId: updateresult2.officeId,
+            })
         );
     } catch (error) {
         // Log the errors.
