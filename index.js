@@ -9,7 +9,7 @@ const { sendEmail } = require('./email.js');
 //const { verifyJWT } = require('./verifyJWT');
 const { generateUniqueUserId } = require('./helpers/generateId');
 
-const { hrtime } = require('process');
+const opossum = require('opossum');
 
 // Models
 const User = require('./models/user');
@@ -35,6 +35,8 @@ const resetPasswordErrorTopic = 'dentistimo/reset-password/error';
 
 const sendEmailCodeTopic = 'dentistimo/send-email-code';
 const sendEmailCodeErrorTopic = 'dentistimo/send-email-code/error';
+
+const sendDentistTopic = 'dentistimo/add-dentist';
 
 const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
@@ -75,10 +77,13 @@ const client = mqtt.connect(connectUrl, {
 });
 
 // const client = mqtt.connect('mqtt://localhost'); // For development only
+const circuitBreaker = new opossum(handleRequest, {
+    errorThresholdPercentage: 75, // When 50% or more of requests fail, the circuit will open
+    resetTimeout: 30000, // The circuit will automatically close after 30 seconds
+    timeout: 7500, // The function will timeout after 7.5 seconds
+});
 
-client.on('connect', () => {
-    console.log('MQTT connected');
-
+client.on('connect', async () => {
     const topics = [
         registerUserTopic,
         registerDentistTopic,
@@ -90,15 +95,42 @@ client.on('connect', () => {
         sendEmailCodeTopic,
     ];
 
-    topics.forEach((topic) => {
-        client.subscribe(topic, { qos: 2 }, () => {
-            console.log(`Subscribed to topic '${topic}'`);
+    // Use a map function to create an array of Promises, one for each topic
+    const subscriptions = topics.map((topic) => {
+        return new Promise((resolve, reject) => {
+            client.subscribe(topic, { qos: 2 }, (error) => {
+                if (error) {
+                    reject(error);
+                } else {
+                    console.log(`Subscribed to topic '${topic}'`);
+                    resolve();
+                }
+            });
         });
     });
+
+    // Wait for all of the subscriptions to complete
+    await Promise.all(subscriptions);
+    console.log('MQTT connected');
+});
+
+circuitBreaker.on('timeout', (error) => {
+    console.error('Function execution timed out', error);
+});
+
+circuitBreaker.on('halfOpen', () => {
+    console.log('Circuit breaker is half open');
+});
+
+circuitBreaker.on('open', () => {
+    console.log('Circuit breaker is open');
 });
 
 client.on('message', async (topic, payload) => {
-    console.log(JSON.parse(payload.toString()).email);
+    await circuitBreaker.fire(topic, payload);
+});
+
+async function handleRequest(topic, payload) {
     switch (topic) {
         case registerDentistTopic:
         case registerUserTopic:
@@ -121,17 +153,32 @@ client.on('message', async (topic, payload) => {
         default:
             console.log('Undefined topic');
     }
-});
+}
+
+function getUserInfo(payload) {
+    try {
+        const userInfo = JSON.parse(payload.toString());
+        return userInfo;
+    } catch (error) {
+        console.error(error);
+        return null;
+    }
+}
 
 async function registerUser(topic, payload) {
-    const start = hrtime();
-    // Parse the payload and extract the user information
-    const userInfo = JSON.parse(payload.toString());
-    const { firstName, lastName, email, password, passwordCheck, requestId } =
-        userInfo;
-    let officeId;
-
     try {
+        // Parse the payload and extract the user information
+        const userInfo = getUserInfo(payload);
+        if (!userInfo) throw new Error('Invalid JSON');
+        const {
+            firstName,
+            lastName,
+            email,
+            password,
+            passwordCheck,
+            requestId,
+        } = userInfo;
+        let officeId;
         // If the topic is registerDentistTopic, extract the officeId field from the payload
         if (topic === registerDentistTopic) {
             officeId = userInfo.officeId;
@@ -216,6 +263,13 @@ async function registerUser(topic, payload) {
         // Publish success or error message
         if (topic == registerDentistTopic) {
             client.publish(
+                `${sendDentistTopic}`,
+                JSON.stringify({
+                    officeId: savedUser.officeId,
+                    dentistId: savedUser.dentistId,
+                })
+            );
+            client.publish(
                 `${registerDentistTopic}/${requestId}`,
                 JSON.stringify({
                     firstName: savedUser.firstName,
@@ -234,9 +288,6 @@ async function registerUser(topic, payload) {
                 })
             );
         }
-        const end = hrtime(start);
-        const elapsedTimeInSeconds = end[0] + end[1] / 1e9;
-        console.log(`Elapsed time: ${elapsedTimeInSeconds} seconds`);
     } catch (error) {
         console.error('[register error]', error.message);
     }
@@ -245,8 +296,10 @@ async function registerUser(topic, payload) {
 async function login(topic, payload) {
     // Parse the payload and extract the email, password, and requestId
     let user;
-    const { email, password, requestId } = JSON.parse(payload.toString());
     try {
+        // Parse the payload and extract the user information
+        const userInfo = getUserInfo(payload);
+        if (!userInfo) throw new Error('Invalid JSON');
         // Check if the email and password fields are present
         if (!email || !password) {
             // If either field is missing, throw an error and publish an error message
@@ -495,10 +548,10 @@ async function comparePasswords(user, password) {
 
 //Method 2:  Change password
 async function resetPassword(topic, payload) {
-    let { email, userCode, newPassword, requestId } = JSON.parse(
-        payload.toString()
-    );
     try {
+        // Parse the payload and extract the user information
+        const userInfo = getUserInfo(payload);
+        if (!userInfo) throw new Error('Invalid JSON');
         // Check if email is already registered
         let user;
         if (topic === registerDentistTopic) {
@@ -577,8 +630,10 @@ async function resetPassword(topic, payload) {
 }
 
 async function sendEmailCode(topic, payload) {
-    let { email, requestId } = JSON.parse(payload.toString());
     try {
+        // Parse the payload and extract the user information
+        const userInfo = getUserInfo(payload);
+        if (!userInfo) throw new Error('Invalid JSON');
         let user = await User.findOne({ email });
         if (!user)
             return client.publish(

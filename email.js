@@ -1,5 +1,4 @@
 module.exports = {
-    
     async sendEmail(transporter, recipient, subject, text) {
         let mailOptions = {
             name: 'Dentistimo',

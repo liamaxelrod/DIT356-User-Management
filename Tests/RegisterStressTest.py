@@ -6,7 +6,7 @@ import json
 topic = "dentistimo/register/dentist"
 
 # The number of messages to send
-num_messages = 100
+num_messages = 1000
 
 # Create an MQTT client
 client = mqtt.Client()
@@ -24,14 +24,14 @@ for i in range(num_messages):
                 "lastName": "sdfgwerg",
                 "password": "Password123",
                 "passwordCheck": "Password123",
-                "email": f"1vvalka1mmhhh11a1{i}@gmail.com",
+                "email": f"1vvalkaaaaaaa1mmhhh11a1{i}@gmail.com",
                 "requestId": "123456789",
-                "officeId": "2",
+                "officeId": "3",
             }
         ),
         qos=0
     )
-    # time.sleep(0.01)  # Delay between messages
+    time.sleep(0.001)  # Delay between messages
 
 # Disconnect from the broker
 client.disconnect()
