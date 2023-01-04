@@ -26,8 +26,8 @@ const loginDentistTopic = 'dentistimo/login/dentist';
 const loginErrorTopic = 'dentistimo/login/error';
 
 // Modify and reset password topics
-const modifyPasswordTopic = 'dentistimo/modify-password';
-const modifyPasswordErrorTopic = 'dentistimo/modify-password/error';
+const modifyUserTopic = 'dentistimo/modify-user';
+const modifyUserErrorTopic = 'dentistimo/modify-user/error';
 
 const resetPasswordDentistTopic = 'dentistimo/reset-password/dentist';
 const resetPasswordUserTopic = 'dentistimo/reset-password/user';
@@ -89,7 +89,7 @@ client.on('connect', async () => {
         registerDentistTopic,
         loginUserTopic,
         loginDentistTopic,
-        modifyPasswordTopic,
+        modifyUserTopic,
         resetPasswordDentistTopic,
         resetPasswordUserTopic,
         sendEmailCodeTopic,
@@ -140,8 +140,8 @@ async function handleRequest(topic, payload) {
         case loginUserTopic:
             login(topic, payload);
             break;
-        case modifyPasswordTopic:
-            modifyPassword(topic, payload);
+        case modifyUserTopic:
+            modifyUser(topic, payload);
             break;
         case resetPasswordDentistTopic:
         case resetPasswordUserTopic:
@@ -419,116 +419,131 @@ async function login(topic, payload) {
     }
 }
 
-async function modifyPassword(topic, payload) {
-    let userId;
-    let decoded;
+async function modifyUser(topic, payload) {
+    // Parse the payload into an object.
+    let { idToken, oldPassword, newPassword, firstName, lastName, email, officeId } =
+        JSON.parse(payload.toString());
+    let user;
 
     try {
-        // Parse the payload and extract the user information
-        const userInfo = getUserInfo(payload);
-        if (!userInfo) throw new Error('Invalid JSON');
-        // Check if the email and password fields are present
-        if (!idToken || !oldPassword || !newPassword) {
-            // If either field is missing, throw an error and publish an error message
-            const error = new Error('All fields are required');
+        // Check if the idToken field is present
+        if (!idToken) {
+            // If the idToken field is missing, throw an error and publish an error
+            // message
+            const error = new Error('idToken is required');
             client.publish(
-                `${modifyPasswordErrorTopic}/${idToken}`,
+                `${modifyUserErrorTopic}/${idToken}`,
                 error.message
             );
             throw error;
         }
 
-        try {
-            // Verify the idToken to retrieve the user's id.
-            decoded = jwt.verify(idToken, process.env.JWT_SECRET); // TODO CHANGE TO THE verifyJWT.js METHOD
-            console.log(decoded);
-            userId = decoded.aud;
-            console.log(userId);
-        } catch (error) {
-            // If the idToken is invalid, throw an error.
-            const invalidIdTokenError = new Error('Invalid idToken');
-            client.publish(
-                `${modifyPasswordErrorTopic}/${idToken}`,
-                invalidIdTokenError.message
-            );
-            throw invalidIdTokenError;
-        }
+        // Verify the idToken to retrieve the user's id.
+        const { decoded, userId } = await verifyIdToken(idToken);
+        console.log(decoded);
 
         // Find the user in the database.
-        if (decoded.role == 'User') {
-            user = await User.findOne({ _id: userId });
-        } else {
-            user = await Dentist.findOne({ _id: userId });
-        }
+        user = await findUser(userId, decoded.role);
 
         if (!user) {
             // If the user is not found, throw an error.
             const error = new Error('User not found');
             client.publish(
-                `${modifyPasswordErrorTopic}/${idToken}`,
+                `${modifyUserErrorTopic}/${idToken}`,
                 error.message
             );
             throw error;
         }
 
-        // Check that the new password is at least 8 characters long.
-        if (newPassword.length < 8) {
+        // Check that the new password is at least 8 characters long if it is provided.
+        if (newPassword && newPassword.length < 8) {
             const error = new Error(
                 'Password must be longer than 8 characters'
             );
             client.publish(
-                `${modifyPasswordErrorTopic}/${idToken}`,
+                `${modifyUserErrorTopic}/${idToken}`,
                 error.message
             );
             throw error;
         }
-
-        // Compare the provided old password with the user's hashed password in the database.
-        let isMatch = await bcrypt.compare(oldPassword, user.password);
-        if (!isMatch) {
-            // If the passwords do not match, throw an error.
-            const error = new Error('Password is incorrect');
-            client.publish(
-                `${modifyPasswordErrorTopic}/${idToken}`,
-                error.message
-            );
-            throw error;
+        // If the old password field is provided, compare it with the user's hashed password in the database.
+        if (oldPassword) {
+            let isMatch = await comparePasswords(user, oldPassword);
+            if (!isMatch) {
+                // If the passwords do not match, throw an error.
+                const error = new Error('Password is incorrect');
+                client.publish(
+                    `${modifyUserErrorTopic}/${idToken}`,
+                    error.message
+                );
+                throw error;
+            }
         }
 
-        // Hash the new password.
-        let salt = await bcrypt.genSalt();
-        let passwordHash = await bcrypt.hash(newPassword, salt);
+        // Hash the new password if it is provided.
+        if (newPassword) {
+            let salt = await bcrypt.genSalt();
+            newPasswordHash = await bcrypt.hash(newPassword, salt);
+        }
+
         let updateResult;
 
-        // Update the user's password in the database.
+        // Update the user in the database with the provided data.
         if (decoded.role == 'User') {
-            updateResult = await User.updateOne(
+            updateResult = await User.findOneAndUpdate(
                 { _id: userId },
-                { password: passwordHash }
+                { firstName, lastName, email, password: newPasswordHash }
             );
         } else {
-            updateResult = await Dentist.updateOne(
+            updateResult = await Dentist.findOneAndUpdate(
                 { _id: userId },
-                { password: passwordHash }
+                { firstName, lastName, email, password: newPasswordHash, officeId }
             );
         }
 
         if (!updateResult) {
             // If the update was unsuccessful, throw an error.
-            const error = new Error('Failed to update password');
+            const error = new Error('Failed to update user');
             client.publish(
-                `${modifyPasswordErrorTopic}/${idToken}`,
+                `${modifyUserErrorTopic}/${idToken}`,
                 error.message
             );
             throw error;
         }
-
-        // If the password change was successful, publish a message to the modifyPasswordTopic.
-        client.publish(`${modifyPasswordTopic}/${idToken}`, 'Reset successful');
+        // If the update was successful, publish a message to the modifyPasswordTopic.
+        client.publish(
+            `${modifyUserTopic}/${idToken}`,
+            'Update successful'
+        );
     } catch (error) {
         // Log the errors.
         console.error('[modifyPassword]', error.message);
     }
+}
+
+async function verifyIdToken(idToken) {
+    try {
+        const decoded = jwt.verify(idToken, process.env.JWT_SECRET);
+        console.log(decoded);
+        return { decoded, userId: decoded.aud };
+    } catch (error) {
+        const invalidIdTokenError = new Error('Invalid idToken');
+        throw invalidIdTokenError;
+    }
+}
+
+async function findUser(userId, role) {
+    let user;
+    if (role === 'User') {
+        user = await User.findOne({ _id: userId });
+    } else {
+        user = await Dentist.findOne({ _id: userId });
+    }
+    return user;
+}
+
+async function comparePasswords(user, password) {
+    return await bcrypt.compare(password, user.password);
 }
 
 //Method 2:  Change password
