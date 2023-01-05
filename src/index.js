@@ -9,6 +9,7 @@ const { login } = require('./login');
 const { modifyUser } = require('./modifyUser');
 const { resetPassword } = require('./resetPassword');
 const { sendEmailCode } = require('./resetPassword');
+const { handleVerifyIdTokenRequest } = require('./helpers/verifyJWT');
 
 // Register topics
 const registerUserTopic = 'dentistimo/register/user';
@@ -23,6 +24,8 @@ const modifyUserTopic = 'dentistimo/modify-user';
 const resetPasswordDentistTopic = 'dentistimo/reset-password/dentist';
 const resetPasswordUserTopic = 'dentistimo/reset-password/user';
 const sendEmailCodeTopic = 'dentistimo/send-email-code';
+
+const authenticationTopic = 'dentistimo/authentication';
 
 const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
@@ -80,6 +83,7 @@ client.on('connect', async () => {
         resetPasswordDentistTopic,
         resetPasswordUserTopic,
         sendEmailCodeTopic,
+        authenticationTopic
     ];
 
     // Use a map function to create an array of Promises, one for each topic
@@ -137,6 +141,9 @@ async function handleRequest(topic, payload) {
             break;
         case sendEmailCodeTopic:
             sendEmailCode(client, transporter, topic, payload);
+            break;
+        case authenticationTopic:
+            handleVerifyIdTokenRequest(topic, payload, client);
             break;
         default:
             console.log('Undefined topic');

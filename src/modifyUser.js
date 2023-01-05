@@ -8,7 +8,6 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 async function modifyUser(client, topic, payload) {
-
     let user;
 
     try {
