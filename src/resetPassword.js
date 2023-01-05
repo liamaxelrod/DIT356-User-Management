@@ -27,7 +27,7 @@ async function resetPassword(client, topic, payload) {
             );
             throw error;
         }
-        
+
         //Verify that the code is correct
         if (user.code != userCode)
             return client.publish(
@@ -80,7 +80,7 @@ async function resetPassword(client, topic, payload) {
         } else if (topic === resetPasswordUserTopic) {
             return client.publish(
                 `${resetPasswordUserTopic}/${requestId}`,
-                'Reset successful'
+                '{"status": "reset successful"}'
             );
         }
     } catch (error) {
@@ -108,6 +108,7 @@ async function sendEmailCode(client, transporter, topic, payload) {
         }
         console.log('Code is: ' + code);
 
+        // Send an email to the user with the code
         sendEmail(
             transporter,
             email,

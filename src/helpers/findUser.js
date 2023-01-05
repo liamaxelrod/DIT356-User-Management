@@ -16,7 +16,7 @@ async function findUserById(userId, role) {
     return user;
 }
 
-async function findUserByEmail (topic, email){
+async function findUserByEmail(topic, email) {
     let user;
     if (topic === loginDentistTopic) {
         user = await Dentist.findOne({ email: email });
@@ -26,4 +26,4 @@ async function findUserByEmail (topic, email){
     return user;
 }
 
-module.exports = {findUserByEmail, findUserById};
+module.exports = { findUserByEmail, findUserById };

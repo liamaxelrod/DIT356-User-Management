@@ -63,8 +63,9 @@ const client = mqtt.connect(connectUrl, {
 });
 
 // const client = mqtt.connect('mqtt://localhost'); // For development only
+
 const circuitBreaker = new opossum(handleRequest, {
-    errorThresholdPercentage: 75, // When 50% or more of requests fail, the circuit will open
+    errorThresholdPercentage: 75, // When 75% or more of requests fail, the circuit will open
     resetTimeout: 30000, // The circuit will automatically close after 30 seconds
     timeout: 7500, // The function will timeout after 7.5 seconds
 });
@@ -117,6 +118,7 @@ client.on('message', async (topic, payload) => {
 });
 
 async function handleRequest(topic, payload) {
+    console.log(topic);
     switch (topic) {
         case registerDentistTopic:
         case registerUserTopic:

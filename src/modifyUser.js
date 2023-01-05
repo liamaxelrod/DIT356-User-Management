@@ -8,12 +8,14 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 async function modifyUser(client, topic, payload) {
+
     let user;
 
     try {
         // Parse the payload and extract the user information
         const userInfo = getUserInfo(payload);
         if (!userInfo) throw new Error('Invalid JSON');
+        console.log(payload.toString());
         // Parse the payload into an object.
         let {
             idToken,
@@ -35,7 +37,6 @@ async function modifyUser(client, topic, payload) {
 
         // Verify the idToken to retrieve the user's id.
         const { decoded, userId } = await verifyIdToken(idToken);
-        console.log(userId);
 
         // Find the user in the database.
         user = await findUserById(userId, decoded.role);
@@ -58,7 +59,8 @@ async function modifyUser(client, topic, payload) {
         }
 
         // Compare the provided password with the user's hashed password in the database.
-        let isMatch = await comparePasswords(user, oldPassword);
+        console.log(user.password);
+        let isMatch = await comparePasswords(user.password, oldPassword);
         if (!isMatch) {
             // If the passwords do not match, throw an error.
             const error = new Error('Password is incorrect');
@@ -97,6 +99,7 @@ async function modifyUser(client, topic, payload) {
         }
 
         await updateResult.save();
+        console.log(updateResult);
 
         if (!updateResult) {
             // If the update was unsuccessful, throw an error.
@@ -123,7 +126,7 @@ async function modifyUser(client, topic, payload) {
         );
     } catch (error) {
         // Log the errors.
-        console.error('[modifyPassword]', error.message);
+        console.error('[modifyPassword]', error);
     }
 }
 
@@ -138,8 +141,10 @@ async function verifyIdToken(idToken) {
     }
 }
 
-async function comparePasswords(user, password) {
-    return await bcrypt.compare(password, user.password);
+async function comparePasswords(hash, password) {
+    let result = await bcrypt.compare(password, hash);
+    console.log(result);
+    return result;
 }
 
 module.exports = { modifyUser };
