@@ -23,7 +23,9 @@ const loginDentistTopic = 'dentistimo/login/dentist';
 const modifyUserTopic = 'dentistimo/modify-user';
 const resetPasswordDentistTopic = 'dentistimo/reset-password/dentist';
 const resetPasswordUserTopic = 'dentistimo/reset-password/user';
-const sendEmailCodeTopic = 'dentistimo/send-email-code';
+
+const sendEmailCodeDentistTopic = 'dentistimo/send-email-code/dentist';
+const sendEmailCodeUserTopic = 'dentistimo/send-email-code/user';
 
 const authenticationTopic = 'dentistimo/authentication';
 
@@ -65,6 +67,19 @@ const client = mqtt.connect(connectUrl, {
     reconnectPeriod: 1000,
 });
 
+// const host = 'broker.emqx.io';
+// const port = '1883';
+
+// const connectUrl = `mqtt://${host}:${port}`;
+// const client = mqtt.connect(connectUrl, {
+//     clientId,
+//     clean: true,
+//     connectTimeout: 4000,
+//     // username: 'group6_dentistimo',
+//     // password: 'dentistimo123!',
+//     reconnectPeriod: 1000,
+// });
+
 // const client = mqtt.connect('mqtt://localhost'); // For development only
 
 const circuitBreaker = new opossum(handleRequest, {
@@ -82,8 +97,9 @@ client.on('connect', async () => {
         modifyUserTopic,
         resetPasswordDentistTopic,
         resetPasswordUserTopic,
-        sendEmailCodeTopic,
-        authenticationTopic
+        sendEmailCodeDentistTopic,
+        sendEmailCodeUserTopic,
+        authenticationTopic,
     ];
 
     // Use a map function to create an array of Promises, one for each topic
@@ -139,7 +155,8 @@ async function handleRequest(topic, payload) {
         case resetPasswordUserTopic:
             resetPassword(client, topic, payload);
             break;
-        case sendEmailCodeTopic:
+        case sendEmailCodeUserTopic:
+        case sendEmailCodeDentistTopic:
             sendEmailCode(client, transporter, topic, payload);
             break;
         case authenticationTopic:

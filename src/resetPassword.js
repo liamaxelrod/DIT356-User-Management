@@ -6,12 +6,14 @@ const resetPasswordErrorTopic = 'dentistimo/reset-password/error';
 const sendEmailCodeErrorTopic = 'dentistimo/send-email-code/error';
 const resetPasswordDentistTopic = 'dentistimo/reset-password/dentist';
 const resetPasswordUserTopic = 'dentistimo/reset-password/user';
-const sendEmailCodeTopic = 'dentistimo/send-email-code';
+const sendEmailCodeDentistTopic = 'dentistimo/send-email-code/dentist';
+const sendEmailCodeUserTopic = 'dentistimo/send-email-code/user';
 
 const bcrypt = require('bcrypt');
 
 async function resetPassword(client, topic, payload) {
     try {
+        console.log(payload.toString());
         // Parse the payload and extract the user information
         const userInfo = await getUserInfo(payload);
         if (!userInfo) throw new Error('Invalid JSON');
@@ -71,6 +73,8 @@ async function resetPassword(client, topic, payload) {
             );
         }
         console.log(user.password);
+        user.code = undefined;
+        user.save();
 
         if (topic === resetPasswordDentistTopic) {
             return client.publish(
@@ -89,18 +93,30 @@ async function resetPassword(client, topic, payload) {
 }
 
 async function sendEmailCode(client, transporter, topic, payload) {
+    console.log(payload.toString());
     try {
         // Parse the payload and extract the user information
         const userInfo = getUserInfo(payload);
         if (!userInfo) throw new Error('Invalid JSON');
         // Parse the payload into an object.
         let { email, requestId } = userInfo;
-        let user = await User.findOne({ email });
-        if (!user)
-            return client.publish(
-                `${sendEmailCodeTopic}/${requestId}`,
-                'An email has been sent if there is an account associated with that email'
-            );
+
+        console.log(userInfo);
+        let user = await findUserByEmail(topic, email);
+        console.log(user);
+        if (!user) {
+            if (topic === sendEmailCodeDentistTopic) {
+                return client.publish(
+                    `${sendEmailCodeDentistTopic}/${requestId}`,
+                    'An email has been sent if there is an account associated with that email'
+                );
+            } else {
+                return client.publish(
+                    `${sendEmailCodeUserTopic}/${requestId}`,
+                    'An email has been sent if there is an account associated with that email'
+                );
+            }
+        }
 
         let code = '';
         for (let i = 0; i < 6; i++) {
@@ -116,11 +132,19 @@ async function sendEmailCode(client, transporter, topic, payload) {
             'Heres the code for resetting your password:' + code
         );
 
-        await User.updateOne({ email }, { code }, { upsert: true });
-        return client.publish(
-            `${sendEmailCodeTopic}/${requestId}`,
-            'An email has been sent if there is an account associated with that email'
-        );
+        if (topic === sendEmailCodeDentistTopic) {
+            await Dentist.updateOne({ email }, { code }, { upsert: true });
+            return client.publish(
+                `${sendEmailCodeDentistTopic}/${requestId}`,
+                'An email has been sent if there is an account associated with that email'
+            );
+        } else {
+            await User.updateOne({ email }, { code }, { upsert: true });
+            return client.publish(
+                `${sendEmailCodeUserTopic}/${requestId}`,
+                'An email has been sent if there is an account associated with that email'
+            );
+        }
     } catch (error) {
         console.error('[Send code]', error);
         client.publish(

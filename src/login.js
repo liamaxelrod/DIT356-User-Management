@@ -27,7 +27,6 @@ async function login(client, topic, payload) {
         if (topic == loginUserTopic) {
             // If the topic is for user logins, find the user with the matching email
             user = await findUserByEmail(topic, email);
-            console.log(user);
             // If no user is found, throw an error and publish an error message
             if (!user) {
                 const error = new Error('User name or password incorrect');
@@ -61,14 +60,14 @@ async function login(client, topic, payload) {
             let token = jwt.sign(tokens, process.env.JWT_SECRET, {
                 issuer: 'Dentistimo-User-Management',
                 audience: user.userId.toString(),
-                expiresIn: 3600,
+                expiresIn: 360000,
             });
 
             // Publish the login success message with the JWT token
             client.publish(
                 `${loginUserTopic}/${requestId}`,
                 JSON.stringify({
-                    IdToken: token,
+                    idToken: token,
                     firstName: user.firstName,
                     lastName: user.lastName,
                     email: user.email,
@@ -78,7 +77,6 @@ async function login(client, topic, payload) {
         } else if (topic == loginDentistTopic) {
             // If the topic is for dentist logins, find the dentist with the matching email
             user = await findUserByEmail(topic, email);
-            console.log(user);
             // If no dentist is found, throw an error and publish an error message
             if (!user) {
                 const error = new Error('User name or password incorrect');
@@ -113,14 +111,14 @@ async function login(client, topic, payload) {
             let token = jwt.sign(tokens, process.env.JWT_SECRET, {
                 issuer: 'Dentistimo-User-Management',
                 audience: user.dentistId.toString(),
-                expiresIn: 3600,
+                expiresIn: 360000,
             });
 
             // Publish the login success message with the JWT token and company name
             client.publish(
                 `${loginDentistTopic}/${requestId}`,
                 JSON.stringify({
-                    IdToken: token,
+                    idToken: token,
                     firstName: user.firstName,
                     lastName: user.lastName,
                     email: user.email,

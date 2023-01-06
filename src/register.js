@@ -66,7 +66,9 @@ async function registerUser(client, topic, payload) {
 
         // Check if email is already registered
         let existingUser = await findUserByEmail(topic, email);
+        console.log(existingUser);
         if (existingUser) {
+            console.log('hello');
             const error = new Error('Email is already in use');
             client.publish(`${registerErrorTopic}/${requestId}`, error.message);
             throw error;
