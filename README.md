@@ -34,3 +34,6 @@ Then you can use either a dedicated MQTT program (like [MQTTX](https://mqttx.app
 Felix Valkama, Qianyuan Wang
 
 ## License
+
+This project is part of the course DIT356 for Gothenburg university.
+Use is only allowed for the examiners or developers of this project.
