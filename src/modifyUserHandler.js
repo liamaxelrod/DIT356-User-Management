@@ -14,7 +14,6 @@ async function modifyUser(client, topic, payload) {
         // Parse the payload and extract the user information
         const userInfo = getUserInfo(payload);
         if (!userInfo) throw new Error('Invalid JSON');
-        console.log(payload.toString());
         // Parse the payload into an object.
         let {
             idToken,
@@ -39,7 +38,6 @@ async function modifyUser(client, topic, payload) {
 
         // Find the user in the database.
         user = await findUserById(userId, decoded.role);
-        console.log(user);
 
         if (!user) {
             // If the user is not found, throw an error.
@@ -58,7 +56,6 @@ async function modifyUser(client, topic, payload) {
         }
 
         // Compare the provided password with the user's hashed password in the database.
-        console.log(user.password);
         let isMatch = await comparePasswords(user.password, oldPassword);
         if (!isMatch) {
             // If the passwords do not match, throw an error.
@@ -98,7 +95,6 @@ async function modifyUser(client, topic, payload) {
         }
 
         await updateResult.save();
-        console.log(updateResult);
 
         if (!updateResult) {
             // If the update was unsuccessful, throw an error.
@@ -125,14 +121,13 @@ async function modifyUser(client, topic, payload) {
         );
     } catch (error) {
         // Log the errors.
-        console.error('[modifyPassword]', error);
+        console.error('[modifyUser]', error);
     }
 }
 
 async function verifyIdToken(idToken) {
     try {
         const decoded = jwt.verify(idToken, process.env.JWT_SECRET);
-        console.log(decoded);
         return { decoded, userId: decoded.aud };
     } catch (error) {
         const invalidIdTokenError = new Error('Invalid idToken');
@@ -142,7 +137,6 @@ async function verifyIdToken(idToken) {
 
 async function comparePasswords(hash, password) {
     let result = await bcrypt.compare(password, hash);
-    console.log(result);
     return result;
 }
 

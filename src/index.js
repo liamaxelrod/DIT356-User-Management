@@ -3,32 +3,25 @@ const mqtt = require('mqtt');
 const mongoose = require('mongoose');
 const nodemailer = require('nodemailer');
 const opossum = require('opossum');
+const { registerUser } = require('./registrationHandler');
+const { login } = require('./loginHandler');
+const { modifyUser } = require('./modifyUserHandler');
+const { resetPassword, sendEmailCode } = require('./resetPasswordHandler');
+const { handleVerifyIdTokenRequest } = require('./helpers/JWTHandler');
 
-const { registerUser } = require('./register');
-const { login } = require('./login');
-const { modifyUser } = require('./modifyUser');
-const { resetPassword } = require('./resetPassword');
-const { sendEmailCode } = require('./resetPassword');
-const { handleVerifyIdTokenRequest } = require('./helpers/verifyJWT');
-
-// Register topics
+// Topics
 const registerUserTopic = 'dentistimo/register/user';
 const registerDentistTopic = 'dentistimo/register/dentist';
-
-// Login topics
 const loginUserTopic = 'dentistimo/login/user';
 const loginDentistTopic = 'dentistimo/login/dentist';
-
-// Modify and reset password topics
 const modifyUserTopic = 'dentistimo/modify-user';
 const resetPasswordDentistTopic = 'dentistimo/reset-password/dentist';
 const resetPasswordUserTopic = 'dentistimo/reset-password/user';
-
 const sendEmailCodeDentistTopic = 'dentistimo/send-email-code/dentist';
 const sendEmailCodeUserTopic = 'dentistimo/send-email-code/user';
-
 const authenticationTopic = 'dentistimo/authentication';
 
+// Mailer
 const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST,
     port: 465,
@@ -54,33 +47,17 @@ mongoose.connect(
     }
 );
 
-// MQTT setup
-const port = '8883';
 const clientId = `mqtt_${Math.random().toString(16).slice(3)}`;
-const connectUrl = `mqtts://${process.env.MQTT_BROKER}:${port}`;
+const host = 'broker.emqx.io';
+const port = '1883';
+const connectUrl = `mqtt://${host}:${port}`;
 const client = mqtt.connect(connectUrl, {
     clientId,
     clean: true,
     connectTimeout: 4000,
-    username: process.env.MQTT_USER_ID,
-    password: process.env.MQTT_PASSWORD,
     reconnectPeriod: 1000,
+    qos: 2,
 });
-
-// const host = 'broker.emqx.io';
-// const port = '1883';
-
-// const connectUrl = `mqtt://${host}:${port}`;
-// const client = mqtt.connect(connectUrl, {
-//     clientId,
-//     clean: true,
-//     connectTimeout: 4000,
-//     // username: 'group6_dentistimo',
-//     // password: 'dentistimo123!',
-//     reconnectPeriod: 1000,
-// });
-
-// const client = mqtt.connect('mqtt://localhost'); // For development only
 
 const circuitBreaker = new opossum(handleRequest, {
     errorThresholdPercentage: 75, // When 75% or more of requests fail, the circuit will open
@@ -139,6 +116,7 @@ client.on('message', async (topic, payload) => {
 
 async function handleRequest(topic, payload) {
     console.log(topic);
+    console.log(payload.toString());
     switch (topic) {
         case registerDentistTopic:
         case registerUserTopic:

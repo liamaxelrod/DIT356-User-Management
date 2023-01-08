@@ -3,7 +3,6 @@ function getUserInfo(payload) {
         const userInfo = JSON.parse(payload.toString());
         return userInfo;
     } catch (error) {
-        console.error(error);
         return null;
     }
 }

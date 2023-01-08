@@ -1,6 +1,7 @@
 const { generateUniqueUserId } = require('./helpers/generateId');
 const { getUserInfo } = require('./helpers/getUserInfo');
 const { findUserByEmail } = require('./helpers/findUser');
+const { signJWT } = require('./helpers/JWTHandler');
 
 const registerErrorTopic = 'dentistimo/register/error';
 const sendDentistTopic = 'dentistimo/add-dentist';
@@ -66,9 +67,7 @@ async function registerUser(client, topic, payload) {
 
         // Check if email is already registered
         let existingUser = await findUserByEmail(topic, email);
-        console.log(existingUser);
         if (existingUser) {
-            console.log('hello');
             const error = new Error('Email is already in use');
             client.publish(`${registerErrorTopic}/${requestId}`, error.message);
             throw error;
@@ -100,7 +99,8 @@ async function registerUser(client, topic, payload) {
         }
 
         const savedUser = await newUser.save();
-        console.log(savedUser);
+
+        let token = await signJWT(newUser, topic);
 
         // Publish success or error message
         if (topic == registerDentistTopic) {
@@ -114,19 +114,23 @@ async function registerUser(client, topic, payload) {
             client.publish(
                 `${registerDentistTopic}/${requestId}`,
                 JSON.stringify({
+                    status: 'success',
                     firstName: savedUser.firstName,
                     lastName: savedUser.lastName,
                     email: savedUser.email,
                     officeId: savedUser.officeId,
+                    idToken: token,
                 })
             );
         } else {
             client.publish(
                 `${registerUserTopic}/${requestId}`,
                 JSON.stringify({
+                    status: 'success',
                     firstName: savedUser.firstName,
                     lastName: savedUser.lastName,
                     email: savedUser.email,
+                    idToken: token,
                 })
             );
         }

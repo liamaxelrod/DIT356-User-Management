@@ -1,4 +1,4 @@
-const { sendEmail } = require('./email.js');
+const { sendEmail } = require('./helpers/email');
 const { getUserInfo } = require('./helpers/getUserInfo.js');
 const { findUserByEmail } = require('./helpers/findUser');
 
@@ -13,7 +13,6 @@ const bcrypt = require('bcrypt');
 
 async function resetPassword(client, topic, payload) {
     try {
-        console.log(payload.toString());
         // Parse the payload and extract the user information
         const userInfo = await getUserInfo(payload);
         if (!userInfo) throw new Error('Invalid JSON');
@@ -48,31 +47,25 @@ async function resetPassword(client, topic, payload) {
         let salt = await bcrypt.genSalt();
         let passwordHash = await bcrypt.hash(newPassword, salt);
 
-        console.log(user._id);
-
         let updateResult;
         if (topic === resetPasswordDentistTopic) {
             updateResult = await Dentist.findOneAndUpdate(
                 { email: email },
                 { password: passwordHash }
             );
-            console.log(updateResult);
         } else if (topic === resetPasswordUserTopic) {
             updateResult = await User.findOneAndUpdate(
                 { email: email },
                 { password: passwordHash },
                 { new: true, upsert: true }
             );
-            console.log(updateResult);
         }
         if (!updateResult) {
-            console.log(updateResult);
             return client.publish(
                 `${resetPasswordErrorTopic}/${requestId}`,
                 'Reset failed'
             );
         }
-        console.log(user.password);
         user.code = undefined;
         user.save();
 
@@ -93,7 +86,6 @@ async function resetPassword(client, topic, payload) {
 }
 
 async function sendEmailCode(client, transporter, topic, payload) {
-    console.log(payload.toString());
     try {
         // Parse the payload and extract the user information
         const userInfo = getUserInfo(payload);
@@ -101,9 +93,7 @@ async function sendEmailCode(client, transporter, topic, payload) {
         // Parse the payload into an object.
         let { email, requestId } = userInfo;
 
-        console.log(userInfo);
         let user = await findUserByEmail(topic, email);
-        console.log(user);
         if (!user) {
             if (topic === sendEmailCodeDentistTopic) {
                 return client.publish(
