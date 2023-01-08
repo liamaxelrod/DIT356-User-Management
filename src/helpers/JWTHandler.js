@@ -1,10 +1,11 @@
 const jwt = require('jsonwebtoken');
 
 const authenticationResponseTopic = 'dentistimo/authentication/response';
+const registerDentistTopic = 'dentistimo/register/dentist';
+const loginDentistTopic = 'dentistimo/login/dentist';
 
 module.exports = {
     async handleVerifyIdTokenRequest(topic, payload, client) {
-        console.log(payload.toString());
         // Extract the idToken and role from the payload
         const { idToken } = JSON.parse(payload.toString());
 
@@ -21,7 +22,7 @@ module.exports = {
                     JSON.stringify({
                         status: 'Authorized',
                         id: decoded.aud,
-                        role: 'User'
+                        role: 'User',
                     })
                 );
             } else if (decoded.role === 'Dentist') {
@@ -32,7 +33,7 @@ module.exports = {
                     JSON.stringify({
                         status: 'Authorized',
                         id: decoded.aud,
-                        role: 'Dentist'
+                        role: 'Dentist',
                     })
                 );
             } else {
@@ -44,12 +45,47 @@ module.exports = {
                 );
             }
         } catch (error) {
-            console.log('Unauthorized 2');
             // If the idToken is invalid, send a response with the status "Unauthorized"
+            console.log(error.message);
             client.publish(
                 authenticationResponseTopic,
                 JSON.stringify({ status: 'Unauthorized' })
             );
         }
+    },
+
+    async signJWT(user, topic) {
+        let token;
+
+        if (topic == registerDentistTopic || topic == loginDentistTopic) {
+            // Create the JWT tokens object
+            let tokens = {
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: 'Dentist',
+            };
+            // Sign the JWT token
+            token = jwt.sign(tokens, process.env.JWT_SECRET, {
+                issuer: 'Dentistimo-User-Management',
+                audience: user.dentistId.toString(),
+                expiresIn: 360000,
+            });
+        } else {
+            // Create the JWT tokens object
+            let tokens = {
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: 'User',
+            };
+            token = jwt.sign(tokens, process.env.JWT_SECRET, {
+                issuer: 'Dentistimo-User-Management',
+                audience: user.userId.toString(),
+                expiresIn: 360000,
+            });
+        }
+
+        return token;
     },
 };

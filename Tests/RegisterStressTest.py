@@ -6,13 +6,13 @@ import json
 topic = "dentistimo/register/dentist"
 
 # The number of messages to send
-num_messages = 1000
+num_messages = 1100
 
 # Create an MQTT client
 client = mqtt.Client()
 
 # Connect to the broker
-client.connect("localhost", 1883)
+client.connect("broker.emqx.io", 1883)
 
 # Publish the specified number of messages
 for i in range(num_messages):

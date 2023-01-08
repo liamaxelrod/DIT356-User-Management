@@ -1,12 +1,12 @@
 const { getUserInfo } = require('./helpers/getUserInfo');
 const { findUserByEmail } = require('./helpers/findUser');
+const { signJWT } = require('./helpers/JWTHandler');
 
 const loginErrorTopic = 'dentistimo/login/error';
 const loginUserTopic = 'dentistimo/login/user';
 const loginDentistTopic = 'dentistimo/login/dentist';
 
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 
 async function login(client, topic, payload) {
     // Parse the payload and extract the email, password, and requestId
@@ -48,20 +48,7 @@ async function login(client, topic, payload) {
                 throw error;
             }
 
-            // Create the JWT tokens object
-            let tokens = {
-                email: user.email,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                role: 'User',
-            };
-
-            // Sign the JWT token
-            let token = jwt.sign(tokens, process.env.JWT_SECRET, {
-                issuer: 'Dentistimo-User-Management',
-                audience: user.userId.toString(),
-                expiresIn: 360000,
-            });
+            let token = await signJWT(user);
 
             // Publish the login success message with the JWT token
             client.publish(
@@ -99,20 +86,7 @@ async function login(client, topic, payload) {
                 throw error;
             }
 
-            // Create the JWT tokens object
-            let tokens = {
-                email: user.email,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                role: 'Dentist',
-            };
-
-            // Sign the JWT token
-            let token = jwt.sign(tokens, process.env.JWT_SECRET, {
-                issuer: 'Dentistimo-User-Management',
-                audience: user.dentistId.toString(),
-                expiresIn: 360000,
-            });
+            let token = await signJWT(user, topic);
 
             // Publish the login success message with the JWT token and company name
             client.publish(
