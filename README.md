@@ -6,19 +6,13 @@ This is the user management component that is part of [Dentistimo](https://git.c
 
 Built with:
 
-[MQTT.js v4.3.7](https://github.com/mqttjs)
-
-[Node.js v18.12.1](https://nodejs.org/)
-
-[Mongoose v6.8.0](https://mongoosejs.com/)
-
-[bcrypt v5.1.0](https://www.npmjs.com/package/bcrypt?activeTab=readme)
+[MQTT.js v4.3.7](https://github.com/mqttjs), [Node.js v18.12.1](https://nodejs.org/), [Mongoose v6.8.0](https://mongoosejs.com/), [bcrypt v5.1.0](https://www.npmjs.com/package/bcrypt?activeTab=readme), [jsonwebtoken v8.5.1](https://www.npmjs.com/package/jsonwebtoken), [opossum v7.0.1](https://github.com/nodeshift/opossum)
 
 ## Visuals
 
 This diagram shows the interaction and purpose of this component.
 
-![Diagram](./img/DiagramV3.png "System Diagram")
+![Diagram](./img/DiagramV4.drawio.svg "System Diagram")
 
 ## Installation
 
@@ -40,3 +34,6 @@ Then you can use either a dedicated MQTT program (like [MQTTX](https://mqttx.app
 Felix Valkama, Qianyuan Wang
 
 ## License
+
+This project is part of the course DIT356 for Gothenburg university.
+Use is only allowed for the examiners or developers of this project.
