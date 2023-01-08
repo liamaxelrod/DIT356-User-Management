@@ -18,7 +18,7 @@ Built with:
 
 This diagram shows the interaction and purpose of this component.
 
-![Diagram](.img/DiagramV4.drawio.svg "System Diagram")
+![Diagram](./img/DiagramV4.drawio.svg "System Diagram")
 
 ## Installation
 
